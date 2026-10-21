@@ -1,3 +1,4 @@
+import 'server-only';
 import { ApiError, type Environment } from '@paypal/paypal-server-sdk';
 
 /** The slice of the SDK client the health check needs; lets tests pass a stub. */

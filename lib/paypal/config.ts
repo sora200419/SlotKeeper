@@ -1,3 +1,4 @@
+import 'server-only';
 import { Environment } from '@paypal/paypal-server-sdk';
 
 /** Thrown when the PayPal environment variables are missing or invalid. */

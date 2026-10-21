@@ -1,3 +1,4 @@
+import 'server-only';
 import { Client, type Configuration } from '@paypal/paypal-server-sdk';
 import { readPayPalSettings, type PayPalSettings } from './config';
 
