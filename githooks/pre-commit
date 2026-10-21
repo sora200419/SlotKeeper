@@ -1,0 +1,62 @@
+#!/bin/sh
+# Harness pre-commit 闸门
+#   1. 禁止提交 .env 系列文件与私钥文件
+#   2. 禁止提交疑似硬编码密钥（特征库：.claude/hooks/harness-secret-patterns.txt）
+#   3. 禁止删除 Harness 关键文件（账本、闸门本身）
+#   4. 账本有改动时运行 lint，防止 CLAUDE.md 膨胀或规则失去出处
+# 人类确需绕过时可用 git commit --no-verify；AI 使用该参数会被 Claude 闸门硬拦截。
+
+ROOT=$(git rev-parse --show-toplevel) || exit 1
+cd "$ROOT" || exit 1
+fail=0
+IFS='
+'
+
+say() { printf '%s\n' "$*" >&2; }
+block() { say "  ✗ $*"; fail=1; }
+
+# ---------- 1. 敏感文件 ----------
+for f in $(git diff --cached --name-only --diff-filter=ACMR); do
+  base=${f##*/}
+  case "$base" in
+    .env.example|.env.sample|.env.template|.env.dist|.env.default|.env.defaults) ;;
+    .env|.env.*) block "$f：环境变量文件不能入库（只提交 .env.example）" ;;
+    id_rsa|id_dsa|id_ecdsa|id_ed25519|*.p12|*.pfx|*.key|*.jks|*.keystore) block "$f：私钥 / 证书库文件不能入库" ;;
+  esac
+done
+
+# ---------- 2. 硬编码密钥 ----------
+patterns="$ROOT/.claude/hooks/harness-secret-patterns.txt"
+if [ -f "$patterns" ]; then
+  tmp=$(mktemp)
+  grep -v '^#' "$patterns" | grep -v '^[[:space:]]*$' > "$tmp"
+  for f in $(git diff --cached --name-only --diff-filter=ACMR); do
+    hit=$(git diff --cached -U0 --no-color -- "$f" | grep '^+' | grep -v '^+++' | grep -E -f "$tmp" | head -1)
+    [ -n "$hit" ] && block "$f：疑似硬编码密钥 → $(printf '%s' "$hit" | cut -c1-24)…（改用环境变量）"
+  done
+  rm -f "$tmp"
+else
+  say "  ! 未找到密钥特征库 $patterns，跳过密钥扫描"
+fi
+
+# ---------- 3. 关键文件删除 ----------
+for f in $(git diff --cached --name-only --diff-filter=D); do
+  case "$f" in
+    CLAUDE.md|FAILURES.md|.claude/settings.json|.claude/hooks/*|githooks/*)
+      block "$f：这是 Harness 关键文件，删除前请确认并用 --no-verify 由人工提交" ;;
+  esac
+done
+
+# ---------- 4. 账本体检 ----------
+if git diff --cached --name-only | grep -qE '^(CLAUDE|FAILURES)\.md$'; then
+  if command -v node >/dev/null 2>&1 && [ -f "$ROOT/.claude/harness/lint.js" ]; then
+    node "$ROOT/.claude/harness/lint.js" || block "CLAUDE.md 账本体检未通过（见上方输出）"
+  fi
+fi
+
+if [ "$fail" -ne 0 ]; then
+  say ""
+  say "[Harness pre-commit] 提交已拦截。修复上述问题后重试。"
+  exit 1
+fi
+exit 0

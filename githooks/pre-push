@@ -1,0 +1,36 @@
+#!/bin/sh
+# Harness pre-push 闸门：禁止强推（非快进）或删除受保护分支。
+# 这是本地最后一道闸门；远端仍建议开启分支保护（GitHub Branch protection / GitLab Protected branches）。
+
+PROTECTED="main master"
+remote="$1"
+zero=$(git hash-object --stdin </dev/null | tr '0-9a-f' '0')
+fail=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  branch=${remote_ref#refs/heads/}
+  [ "$branch" = "$remote_ref" ] && continue # tag 等非分支引用不管
+
+  protected=0
+  for p in $PROTECTED; do [ "$branch" = "$p" ] && protected=1; done
+  [ "$protected" -eq 1 ] || continue
+
+  if [ "$local_sha" = "$zero" ]; then
+    echo "  ✗ 禁止删除受保护分支 $remote/$branch" >&2
+    fail=1
+  elif [ "$remote_sha" = "$zero" ]; then
+    : # 远端还没有这个分支，属于首次推送
+  elif ! git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+    echo "  ✗ 本地缺少 $remote/$branch 的最新提交，无法确认是否为快进。请先 git fetch 再推送" >&2
+    fail=1
+  elif ! git merge-base --is-ancestor "$remote_sha" "$local_sha"; then
+    echo "  ✗ 禁止强推受保护分支 $remote/$branch（会覆盖远端历史）。请改用新分支 + 合并请求" >&2
+    fail=1
+  fi
+done
+
+if [ "$fail" -ne 0 ]; then
+  echo "[Harness pre-push] 推送已拦截。" >&2
+  exit 1
+fi
+exit 0
