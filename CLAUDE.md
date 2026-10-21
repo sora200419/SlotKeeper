@@ -4,14 +4,14 @@
 > Every rule must be able to answer: "which real mishap does it prevent?" Rules that cannot answer get deleted during `harness-prune`.
 
 ## Project Overview
-<!-- TODO: One or two sentences: what this project does, who it is for, core tech stack -->
+SlotKeeper: a Next.js (App Router, TypeScript) app for the PayPal AI Hackathon — appointment bookings backed by PayPal sandbox deposits, run by AI agents. Plan and schedule: `PLAN.md`. PayPal SDK code is written with the APIMatic Context Plugin (`paypal:typescript-*` skills); prompts in `docs/apimatic-prompts.md`.
 
 ## Common Commands
-- Install dependencies: `TODO`
-- Run locally: `TODO`
-- Test: `TODO`
-- Lint / format: `TODO`
-- Build / package: `TODO`
+- Install dependencies: `npm install`
+- Run locally: `npm run dev` (needs `.env.local`, see `.env.example`)
+- Test: `npm test` · type check: `npm run typecheck`
+- Lint / format: none yet
+- Build / package: `npm run build`
 - Harness self-check: `node .claude/harness/lint.js` · `node --test ".claude/harness/tests/*.test.js"`
 
 ## Coding Conventions
