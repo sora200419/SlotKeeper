@@ -1,5 +1,5 @@
 import 'server-only';
-import { Client, type Configuration } from '@paypal/paypal-server-sdk';
+import { Client, OrdersController, type Configuration } from '@paypal/paypal-server-sdk';
 import { readPayPalSettings, type PayPalSettings } from './config';
 
 /**
@@ -44,4 +44,9 @@ let sharedClient: Client | undefined;
 export function getPayPalClient(): Client {
   sharedClient ??= createPayPalClient(readPayPalSettings());
   return sharedClient;
+}
+
+/** Controllers are cheap wrappers over the shared client; build one per call site. */
+export function getOrdersController(): OrdersController {
+  return new OrdersController(getPayPalClient());
 }

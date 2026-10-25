@@ -1,5 +1,6 @@
 import 'server-only';
 import { ApiError, type Environment } from '@paypal/paypal-server-sdk';
+import { describeTransportError, isNetworkError, sanitizeError } from './errors';
 
 /** The slice of the SDK client the health check needs; lets tests pass a stub. */
 export interface TokenSource {
@@ -18,27 +19,6 @@ export type CredentialCheck =
       debugId?: string;
       detail: string;
     };
-
-/** Transport-level failure codes from Node / axios; anything else is a bug, not a network issue. */
-const NETWORK_ERROR_CODES = new Set([
-  'ECONNREFUSED',
-  'ECONNRESET',
-  'ECONNABORTED',
-  'ENOTFOUND',
-  'EAI_AGAIN',
-  'ETIMEDOUT',
-  'EHOSTUNREACH',
-  'ENETUNREACH',
-  'EPIPE',
-  'ERR_NETWORK',
-  'ERR_CANCELED',
-]);
-
-function isNetworkError(err: unknown): err is Error {
-  if (!(err instanceof Error)) return false;
-  const code = (err as { code?: unknown }).code;
-  return (typeof code === 'string' && NETWORK_ERROR_CODES.has(code)) || err.name === 'AbortError';
-}
 
 /**
  * Proves the configured credentials work by requesting an OAuth token. Nothing is created and no
@@ -94,15 +74,17 @@ export async function checkPayPalCredentials(
       };
     }
     if (isNetworkError(err)) {
-      console.error('[paypal] token request could not reach PayPal', { message: err.message });
+      // Never log `err` itself: an axios error carries the Basic auth header with the client secret.
+      const description = describeTransportError(err);
+      console.error('[paypal] token request could not reach PayPal', { reason: description });
       return {
         ok: false,
         environment,
         reason: 'network_error',
-        detail: `Could not reach PayPal: ${err.message}`,
+        detail: `Could not reach PayPal: ${description}`,
       };
     }
-    throw err;
+    throw sanitizeError(err, 'PayPal token check failed');
   }
 }
 

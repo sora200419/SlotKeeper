@@ -102,10 +102,59 @@ describe('checkPayPalCredentials', () => {
     expect(console.error).toHaveBeenCalled();
   });
 
-  it('re-throws programming errors instead of calling them network errors', async () => {
+  it('re-throws programming errors instead of calling them network errors, as a sanitized error', async () => {
     await expect(
       checkPayPalCredentials(failing(new TypeError('x is not a function')), Environment.Sandbox),
-    ).rejects.toThrow(TypeError);
+    ).rejects.toThrow('TypeError: x is not a function');
+  });
+
+  it('turns a TLS failure carrying the Basic auth header into a clean network_error, leaking nothing', async () => {
+    // Shape of the real failure: an axios error whose request config holds the client secret.
+    const leaky = Object.assign(new Error('unable to verify the first certificate'), {
+      isAxiosError: true,
+      config: { headers: { Authorization: 'Basic TOP-SECRET-CREDENTIALS' } },
+      request: { _header: 'POST /v1/oauth2/token\r\nAuthorization: Basic TOP-SECRET-CREDENTIALS' },
+      cause: Object.assign(new Error('unable to verify the first certificate'), {
+        code: 'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+      }),
+    });
+
+    const result = await checkPayPalCredentials(failing(leaky), Environment.Sandbox);
+
+    expect(result).toMatchObject({ ok: false, reason: 'network_error' });
+    expect(result.ok === false && result.detail).toContain('UNABLE_TO_VERIFY_LEAF_SIGNATURE');
+    expect(result.ok === false && result.detail).toContain('NODE_OPTIONS=--use-system-ca');
+    expect(JSON.stringify(result)).not.toContain('TOP-SECRET');
+    const logged = JSON.stringify(vi.mocked(console.error).mock.calls);
+    expect(logged).not.toContain('TOP-SECRET');
+  });
+
+  it('treats any raw axios error as a transport failure instead of re-throwing it', async () => {
+    const axiosLike = Object.assign(new Error('Request failed'), {
+      isAxiosError: true,
+      config: { headers: { Authorization: 'Basic TOP-SECRET-CREDENTIALS' } },
+    });
+    const result = await checkPayPalCredentials(failing(axiosLike), Environment.Sandbox);
+    expect(result).toMatchObject({ ok: false, reason: 'network_error' });
+    expect(JSON.stringify(result)).not.toContain('TOP-SECRET');
+  });
+
+  it('R9: a response-validation error carrying the Authorization header leaks nothing', async () => {
+    // Shape of the real SDK error: it keeps the request, including the Basic auth header.
+    const validation = Object.assign(new Error('Invalid response body.'), {
+      name: 'ResponseValidationError',
+      request: { headers: { Authorization: 'Basic SECRETVALUE123' } },
+    });
+
+    const caught = await checkPayPalCredentials(failing(validation), Environment.Sandbox).catch(
+      (e: unknown) => e,
+    );
+
+    expect(caught).toBeInstanceOf(Error);
+    expect((caught as Error).message).toContain('ResponseValidationError');
+    expect(String((caught as Error).stack)).not.toContain('SECRETVALUE123');
+    expect(JSON.stringify(caught)).not.toContain('SECRETVALUE123');
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain('SECRETVALUE123');
   });
 
   it('handles a token without expires_in', async () => {

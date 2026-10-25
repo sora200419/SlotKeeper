@@ -20,6 +20,16 @@ npm run dev
 Open http://localhost:3000/api/health. `{"ok":true,...}` means the PayPal sandbox credentials work.
 The check only requests an OAuth token; it creates nothing and moves no money.
 
+**Troubleshooting: `UNABLE_TO_VERIFY_LEAF_SIGNATURE` / "TLS certificate could not be verified".**
+Antivirus software (AVG, Avast, …) or a corporate proxy that inspects HTTPS re-signs traffic
+with its own certificate, which Node doesn't trust by default. Start the server so Node uses the
+Windows certificate store, where that certificate is installed (on Node 22 the
+`NODE_USE_SYSTEM_CA` variable is ignored; the `--use-system-ca` flag works):
+
+```powershell
+$env:NODE_OPTIONS = '--use-system-ca'; npm run dev
+```
+
 ```bash
 npm test          # unit tests (no network)
 npm run typecheck

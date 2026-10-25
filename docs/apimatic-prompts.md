@@ -16,8 +16,9 @@ Context for this project: SlotKeeper, a Next.js (App Router, TypeScript) app for
 appointment businesses. PayPal sandbox only. Use the PayPal Context Plugin
 (paypal:typescript-* skills) for every PayPal Server SDK call, and read the installed SDK source
 to confirm signatures. Pin @paypal/paypal-server-sdk to the exact version the plugin names.
-Production-ready by default: handle every error path, set timeouts, send a UUID
-PayPal-Request-Id on money-moving calls, never trust amounts from the browser, keep
+Production-ready by default: handle every error path, set timeouts, send a PayPal-Request-Id
+on money-moving calls (a stable idempotency key per logical attempt, e.g. booking + action +
+attempt, so retries replay instead of duplicating; a random UUID only where no such key exists), never trust amounts from the browser, keep
 PAYPAL_CLIENT_SECRET server-only and read all credentials from env vars with a .env.example.
 ```
 

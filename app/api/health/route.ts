@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getPayPalClient } from '@/lib/paypal/client';
 import { PayPalConfigError, readPayPalSettings } from '@/lib/paypal/config';
+import { sanitizeError } from '@/lib/paypal/errors';
 import { checkPayPalCredentials, createCachedCredentialCheck } from '@/lib/paypal/health';
 
 // The PayPal SDK needs Node APIs (Buffer); never let Next.js prerender a credential check.
@@ -25,7 +26,8 @@ export async function GET() {
         { status: 500 },
       );
     }
-    throw err;
+    // Never re-throw the raw error: an SDK error can carry the Authorization header.
+    throw sanitizeError(err, 'Health check');
   }
 
   const result = await cachedCheck();
