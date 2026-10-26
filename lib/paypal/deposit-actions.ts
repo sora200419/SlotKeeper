@@ -7,6 +7,7 @@ import {
   type PaymentsController,
 } from '@paypal/paypal-server-sdk';
 import { formatAmount, type Money } from '@/lib/booking/catalog';
+import { withBookingLock } from '@/lib/booking/locks';
 import type {
   Booking,
   BookingStatus,
@@ -45,28 +46,6 @@ const ALREADY_CAPTURED_ISSUES = new Set([
   'MAX_CAPTURE_COUNT_EXCEEDED',
 ]);
 const DECLINE_ISSUES = new Set(['INSTRUMENT_DECLINED', 'TRANSACTION_REFUSED', 'PAYER_ACTION_REQUIRED']);
-
-// Bookings with a money call in flight. Each action reads the booking, awaits PayPal, then writes it
-// back, so two at once would overwrite each other's result. Process-local, like the memory store;
-// the Postgres store needs a row lock or version check instead.
-const moneyLocks = globalThis as typeof globalThis & { __slotkeeperMoneyLocks?: Set<string> };
-
-async function withBookingLock<T>(bookingId: string, run: () => Promise<T>): Promise<T> {
-  const locks = (moneyLocks.__slotkeeperMoneyLocks ??= new Set());
-  if (locks.has(bookingId)) {
-    throw new DepositError(
-      'pending_action',
-      409,
-      'Another money action on this booking is in progress. Try again in a moment.',
-    );
-  }
-  locks.add(bookingId);
-  try {
-    return await run();
-  } finally {
-    locks.delete(bookingId);
-  }
-}
 
 function loadHeldBooking(store: BookingStore, bookingId: string): HeldBooking {
   const booking = store.get(bookingId);
@@ -559,7 +538,7 @@ export function reauthorizeDeposit(
 }
 
 /** Money already refunded or still being refunded (failed/cancelled refunds don't count). */
-function refundedCents(hold: DepositHold): number {
+export function refundedCents(hold: DepositHold): number {
   return (hold.refunds ?? [])
     .filter((r) => r.status !== RefundStatus.Failed && r.status !== RefundStatus.Cancelled)
     .reduce((sum, r) => sum + r.amountCents, 0);
@@ -620,6 +599,8 @@ export function refundDeposit(
               body: {
                 amount: toMoney(booking.deposit.currency, effective.amountCents!),
                 invoiceId: `${booking.id}-refund-${sequence}-${attempt}`,
+                // Lets the PAYMENT.CAPTURE.REFUNDED webhook find the booking directly.
+                customId: booking.id,
                 noteToPayer: 'Refund of your appointment deposit.',
               },
             })

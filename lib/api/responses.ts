@@ -1,6 +1,7 @@
 import 'server-only';
 import { NextResponse } from 'next/server';
 import { BookingInputError } from '@/lib/booking/bookings';
+import { BookingBusyError } from '@/lib/booking/locks';
 import { PayPalConfigError } from '@/lib/paypal/config';
 import { DepositError } from '@/lib/paypal/deposits';
 import { sanitizeError } from '@/lib/paypal/errors';
@@ -21,6 +22,9 @@ export function errorResponse(err: unknown): NextResponse {
       },
       { status: err.httpStatus },
     );
+  }
+  if (err instanceof BookingBusyError) {
+    return NextResponse.json({ error: err.code, message: err.message }, { status: err.httpStatus });
   }
   if (err instanceof StaffAuthError) {
     return NextResponse.json(

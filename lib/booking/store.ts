@@ -1,5 +1,6 @@
 import 'server-only';
 import type { Money } from './catalog';
+import { publishBookingChange } from './events';
 
 export type BookingStatus =
   /** Created; waiting for the customer to approve the PayPal deposit hold. */
@@ -43,7 +44,8 @@ export interface DepositCapture {
   amountCents: number;
   /** PayPal capture status, e.g. COMPLETED or PENDING. */
   status: string;
-  reason: 'completed' | 'no_show';
+  /** "external": captured outside SlotKeeper (e.g. the PayPal dashboard), learned from a webhook. */
+  reason: 'completed' | 'no_show' | 'external';
   capturedAt: string;
 }
 
@@ -121,7 +123,18 @@ export function createMemoryBookingStore(): BookingStore {
 // Kept on globalThis so `next dev` hot reloads don't wipe bookings mid-test.
 const globalStore = globalThis as typeof globalThis & { __slotkeeperBookings?: BookingStore };
 
+/** Wraps a store so every save is pushed to live listeners (the staff SSE feed). */
+export function withChangeEvents(store: BookingStore): BookingStore {
+  return {
+    get: (id) => store.get(id),
+    save: (booking) => {
+      store.save(booking);
+      publishBookingChange(structuredClone(booking));
+    },
+  };
+}
+
 export function getBookingStore(): BookingStore {
-  globalStore.__slotkeeperBookings ??= createMemoryBookingStore();
+  globalStore.__slotkeeperBookings ??= withChangeEvents(createMemoryBookingStore());
   return globalStore.__slotkeeperBookings;
 }

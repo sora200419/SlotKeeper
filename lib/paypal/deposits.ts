@@ -8,6 +8,7 @@ import {
   type OrdersController,
 } from '@paypal/paypal-server-sdk';
 import { findService, formatAmount } from '@/lib/booking/catalog';
+import { withBookingLock } from '@/lib/booking/locks';
 import type { Booking, BookingStore, DepositHold } from '@/lib/booking/store';
 import {
   describePayPalError,
@@ -159,12 +160,22 @@ function networkError(err: Error, action: string): DepositError {
  * Before handing out an order it settles any authorize call whose outcome is unknown, so a lost
  * response can never turn into a second hold on the customer.
  */
-export async function createDepositOrder(
+export function createDepositOrder(
   orders: DepositOrders,
   store: BookingStore,
   bookingId: string,
   urls: ReturnUrls,
   now: Date = new Date(),
+): Promise<{ orderId: string }> {
+  return withBookingLock(bookingId, () => createDepositOrderLocked(orders, store, bookingId, urls, now), 'wait');
+}
+
+async function createDepositOrderLocked(
+  orders: DepositOrders,
+  store: BookingStore,
+  bookingId: string,
+  urls: ReturnUrls,
+  now: Date,
 ): Promise<{ orderId: string }> {
   let booking = loadBooking(store, bookingId);
   if (booking.status !== 'awaiting_deposit') {
@@ -228,13 +239,38 @@ export async function createDepositOrder(
  * After the customer approves in the PayPal popup: authorizes the order (holds the deposit, no money
  * moves yet) and records the authorization id on the booking for the later capture/void.
  */
-export async function authorizeDeposit(
+/**
+ * Called by the browser after approval, and by the CHECKOUT.ORDER.APPROVED webhook when the customer
+ * closed the tab first. Both queue on the booking lock; the second sees the hold and stops.
+ */
+export function authorizeDeposit(
   orders: DepositOrders,
   store: BookingStore,
   bookingId: string,
   orderId: string,
   now: Date = new Date(),
 ): Promise<Booking> {
+  return authorizeDepositReporting(orders, store, bookingId, orderId, now).then((r) => r.booking);
+}
+
+/** As `authorizeDeposit`, also saying whether this call placed the hold or found it already there. */
+export function authorizeDepositReporting(
+  orders: DepositOrders,
+  store: BookingStore,
+  bookingId: string,
+  orderId: string,
+  now: Date = new Date(),
+): Promise<{ booking: Booking; alreadyHeld: boolean }> {
+  return withBookingLock(bookingId, () => authorizeDepositLocked(orders, store, bookingId, orderId, now), 'wait');
+}
+
+async function authorizeDepositLocked(
+  orders: DepositOrders,
+  store: BookingStore,
+  bookingId: string,
+  orderId: string,
+  now: Date,
+): Promise<{ booking: Booking; alreadyHeld: boolean }> {
   const booking = loadBooking(store, bookingId);
 
   if (booking.hold?.paypalOrderId !== orderId) {
@@ -242,7 +278,7 @@ export async function authorizeDeposit(
   }
   // Already authorized (double click, retried request): return what we stored.
   if (booking.status !== 'awaiting_deposit' && booking.hold.authorizationId) {
-    return booking;
+    return { booking, alreadyHeld: true };
   }
   if (booking.hold.orderSpent) {
     throw new DepositError(
@@ -251,7 +287,7 @@ export async function authorizeDeposit(
       'This PayPal order can no longer be used. Please start checkout again.',
     );
   }
-  return runAuthorize(orders, store, booking, now);
+  return { booking: await runAuthorize(orders, store, booking, now), alreadyHeld: false };
 }
 
 async function runAuthorize(

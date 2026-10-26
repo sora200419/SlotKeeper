@@ -35,6 +35,13 @@
 - **根因**：错误假设——只考虑了单个请求内的幂等和重放，默认同一预约不会被同时操作；没有追问"await 期间别的请求改了这条记录会怎样"。
 - **修复**：`lib/paypal/deposit-actions.ts` 加每个预约一把进程内锁 `withBookingLock`，在锁内读取预约；退款也校验 PayPal 返回金额；`tests/paypal/deposit-actions.test.ts` 新增并发用例。
 - **规则去向**：全局 ~/.claude/CLAUDE.md
+- **复发记录**：2026-10-26 提示词 4（同日）：webhook 处理器在锁外先读 PayPal 对象，等锁后再写入这份旧快照，乱序事件能把 COMPLETED 写回 PENDING（审查 R1）。规则写的是"在锁内读取预约"，没覆盖"锁外读到的外部状态"。已修为锁内重读（`withFreshRead`）。复发说明靠 Prompt 规则管不住；可自动化方案（如 lint 检查 `withBookingLock` 回调外的 SDK 读）改动较大，已向用户提议。
+
+### F-004 · 2026-10-26 · 竞态回归测试在撤掉修复后依然通过
+- **现象**：为 R1 写的回归测试把事件 A 排在锁里 B 之前，坏的顺序根本没发生；裁判把修复改回去（突变）后测试仍然绿，R1 因此第二轮未关闭。
+- **根因**：没验证——写完测试只看它在修复后通过，没确认它在没有修复时会失败。
+- **修复**：测试改为先完整应用 B，再放行 A 的旧读取；临时把 `lib/paypal/webhook-events.ts` 的重读改成 `const fresh = first;`，确认测试失败（Received "PENDING"）后还原。
+- **规则去向**：全局 ~/.claude/CLAUDE.md
 - **复发记录**：无
 
 ## 精简记录
