@@ -1,0 +1,36 @@
+# Render Blueprint for SlotKeeper (https://render.com/docs/blueprint-spec).
+# New > Blueprint > pick this repo. Render asks for every `sync: false` value; secrets never live here.
+services:
+  - type: web
+    name: slotkeeper
+    runtime: node
+    # Starter, not free: free instances sleep after 15 idle minutes, and bookings live in memory
+    # until the Postgres store lands, so a sleep would wipe them and drop PayPal webhooks.
+    plan: starter
+    region: oregon
+    branch: main
+    autoDeploy: true
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    # Cheap and credential-free; /api/health calls PayPal, which shouldn't decide if the app is up.
+    healthCheckPath: /api/paypal/config
+    envVars:
+      - key: NODE_VERSION
+        value: 22.15.0
+      # No NODE_OPTIONS=--use-system-ca here: that is only for HTTPS-inspecting antivirus on a dev PC.
+      - key: NEXT_PUBLIC_PAYPAL_ENVIRONMENT
+        value: sandbox
+      # NEXT_PUBLIC_* values are baked in at build time; changing one needs a redeploy, not a restart.
+      - key: NEXT_PUBLIC_PAYPAL_CLIENT_ID
+        sync: false
+      - key: PAYPAL_CLIENT_SECRET
+        sync: false
+      - key: STAFF_API_TOKEN
+        sync: false
+      # Set after the service has a URL: register https://<service>.onrender.com/api/webhooks/paypal
+      # in the PayPal dashboard, then paste the Webhook ID here.
+      - key: PAYPAL_WEBHOOK_ID
+        sync: false
+      # The public URL, e.g. https://slotkeeper.onrender.com (PayPal return/cancel links).
+      - key: APP_URL
+        sync: false

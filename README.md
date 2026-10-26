@@ -4,8 +4,9 @@ AI assistants are starting to book appointments for people, and small businesses
 SlotKeeper makes every booking, human- or agent-made, payment-backed with PayPal, and lets the
 owner re-plan the whole day in one sentence.
 
-Built for the PayPal AI Hackathon (PayPal sandbox only). Status: **skeleton** — the PayPal Server
-SDK is wired up and a health check proves the sandbox credentials work.
+Built for the PayPal AI Hackathon (PayPal sandbox only). Status: **payments backbone** — deposit
+holds (Orders v2 AUTHORIZE + JS SDK v6), staff capture / no-show fee / void / reauthorize / refund,
+and signature-verified PayPal webhooks with a live staff feed. The scheduler UI and AI agents are next.
 
 ## Run locally
 
@@ -35,6 +36,21 @@ npm test          # unit tests (no network)
 npm run typecheck
 npm run build
 ```
+
+## Deploy (Render)
+
+[`render.yaml`](render.yaml) is a Render Blueprint: in Render choose **New > Blueprint**, pick this
+repository, and fill in the values it asks for (all from the PayPal sandbox app, plus a staff token
+you generate). PayPal webhooks need the public URL, so they are set up after the first deploy:
+
+1. In developer.paypal.com > Apps & Credentials > your sandbox app > **Add Webhook**, use
+   `https://<your-service>.onrender.com/api/webhooks/paypal` and subscribe to
+   `CHECKOUT.ORDER.APPROVED`, `PAYMENT.AUTHORIZATION.CREATED`, `PAYMENT.AUTHORIZATION.VOIDED`,
+   `PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.DECLINED`, `PAYMENT.CAPTURE.PENDING` and
+   `PAYMENT.CAPTURE.REFUNDED`.
+2. Copy the Webhook ID into the service's `PAYPAL_WEBHOOK_ID` environment variable.
+
+Bookings are kept in memory for now, so a restart or redeploy clears them.
 
 ## How the PayPal integration is built
 
