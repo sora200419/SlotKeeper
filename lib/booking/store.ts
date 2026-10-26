@@ -12,7 +12,48 @@ export type BookingStatus =
    * PayPal holds funds but the authorization doesn't match the booking (e.g. a different amount).
    * The authorization id is kept so staff (or the void step) can release it.
    */
-  | 'deposit_needs_review';
+  | 'deposit_needs_review'
+  /** Service delivered; the full deposit was captured. */
+  | 'completed'
+  /** Customer didn't show; the no-show fee was captured and the rest of the hold released. */
+  | 'no_show_charged'
+  /** Cancelled within policy; the hold was voided, nothing charged. */
+  | 'cancelled'
+  /** Part of the captured money was refunded. */
+  | 'partially_refunded'
+  /** All captured money was refunded. */
+  | 'refunded';
+
+export type MoneyActionKind = 'capture' | 'void' | 'reauthorize' | 'refund';
+
+/**
+ * A money call whose outcome we never saw (5xx, no response, unreadable 2xx). It must be replayed
+ * with the same PayPal-Request-Id and parameters before any other money call on the booking.
+ */
+export interface PendingMoneyAction {
+  kind: MoneyActionKind;
+  requestId: string;
+  amountCents?: number;
+  reason?: 'completed' | 'no_show';
+  since: string;
+}
+
+export interface DepositCapture {
+  captureId: string;
+  amountCents: number;
+  /** PayPal capture status, e.g. COMPLETED or PENDING. */
+  status: string;
+  reason: 'completed' | 'no_show';
+  capturedAt: string;
+}
+
+export interface DepositRefund {
+  refundId: string;
+  amountCents: number;
+  /** PayPal refund status, e.g. COMPLETED or PENDING. */
+  status: string;
+  refundedAt: string;
+}
 
 export interface DepositHold {
   paypalOrderId: string;
@@ -34,6 +75,14 @@ export interface DepositHold {
   /** When PayPal will release the hold if it isn't captured. */
   expiresAt?: string;
   heldAt?: string;
+  /** Authorizations replaced by a reauthorization, oldest first. */
+  previousAuthorizationIds?: string[];
+  capture?: DepositCapture;
+  refunds?: DepositRefund[];
+  voidedAt?: string;
+  pendingAction?: PendingMoneyAction;
+  /** Part of each money call's PayPal-Request-Id; bumped after a definite failure. */
+  actionAttempts?: Partial<Record<MoneyActionKind, number>>;
 }
 
 export interface Booking {

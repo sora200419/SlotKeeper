@@ -4,6 +4,7 @@ import { BookingInputError } from '@/lib/booking/bookings';
 import { PayPalConfigError } from '@/lib/paypal/config';
 import { DepositError } from '@/lib/paypal/deposits';
 import { sanitizeError } from '@/lib/paypal/errors';
+import { StaffAuthError } from './staff';
 
 /**
  * Maps known errors to JSON responses. PayPal debug ids are passed through (they help support);
@@ -18,6 +19,12 @@ export function errorResponse(err: unknown): NextResponse {
         paypalIssue: err.paypal?.issue,
         paypalDebugId: err.paypal?.debugId,
       },
+      { status: err.httpStatus },
+    );
+  }
+  if (err instanceof StaffAuthError) {
+    return NextResponse.json(
+      { error: err.httpStatus === 401 ? 'unauthorized' : 'staff_disabled', message: err.message },
       { status: err.httpStatus },
     );
   }

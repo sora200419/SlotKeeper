@@ -1,5 +1,10 @@
 import 'server-only';
-import { Client, OrdersController, type Configuration } from '@paypal/paypal-server-sdk';
+import {
+  Client,
+  OrdersController,
+  PaymentsController,
+  type Configuration,
+} from '@paypal/paypal-server-sdk';
 import { readPayPalSettings, type PayPalSettings } from './config';
 
 /**
@@ -49,4 +54,8 @@ export function getPayPalClient(): Client {
 /** Controllers are cheap wrappers over the shared client; build one per call site. */
 export function getOrdersController(): OrdersController {
   return new OrdersController(getPayPalClient());
+}
+
+export function getPaymentsController(): PaymentsController {
+  return new PaymentsController(getPayPalClient());
 }

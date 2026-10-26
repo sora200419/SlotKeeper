@@ -30,6 +30,13 @@
 - **规则去向**：全局 ~/.claude/CLAUDE.md
 - **复发记录**：第二次（ResponseValidationError）在同一功能里被复核发现，因此规则改为全局并附测试要求。
 
+### F-003 · 2026-10-26 · 资金动作"读 → await → 写回旧副本"导致并发丢写
+- **现象**：裁判审查用并发复现证明：capture 与 void 同时执行时，void 的 4xx 分支写回 await 之前读到的旧 booking，PayPal 已扣款但记录仍是 `deposit_held` 且没有 capture；两笔退款同时执行时共用同一个 PayPal-Request-Id，并记录了错误金额。
+- **根因**：错误假设——只考虑了单个请求内的幂等和重放，默认同一预约不会被同时操作；没有追问"await 期间别的请求改了这条记录会怎样"。
+- **修复**：`lib/paypal/deposit-actions.ts` 加每个预约一把进程内锁 `withBookingLock`，在锁内读取预约；退款也校验 PayPal 返回金额；`tests/paypal/deposit-actions.test.ts` 新增并发用例。
+- **规则去向**：全局 ~/.claude/CLAUDE.md
+- **复发记录**：无
+
 ## 精简记录
 
 | 日期 | 动作（删除 / 合并 / 自动化 / 升级为全局） | 涉及条目 | 说明 |

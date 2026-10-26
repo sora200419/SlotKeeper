@@ -9,6 +9,11 @@ const STATUS_TEXT: Record<Exclude<BookingStatus, 'awaiting_deposit'>, string> = 
   deposit_held: 'Deposit held',
   deposit_pending: 'Deposit pending PayPal review',
   deposit_needs_review: 'Deposit needs staff review',
+  completed: 'Appointment completed; deposit captured',
+  no_show_charged: 'No-show fee charged; the rest of the hold was released',
+  cancelled: 'Cancelled; the deposit hold was released',
+  partially_refunded: 'Deposit partly refunded',
+  refunded: 'Deposit refunded',
 };
 
 export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {

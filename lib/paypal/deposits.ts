@@ -25,6 +25,9 @@ export type DepositErrorCode =
   | 'declined'
   | 'amount_mismatch'
   | 'needs_review'
+  | 'invalid_amount'
+  | 'authorization_expired'
+  | 'pending_action'
   | 'paypal_error'
   | 'network_error';
 
