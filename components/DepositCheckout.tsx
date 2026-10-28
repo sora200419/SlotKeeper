@@ -52,12 +52,14 @@ interface HeldBooking {
 /** PayPal JS SDK v6 button that places a deposit hold (Orders v2 AUTHORIZE) for one booking. */
 export function DepositCheckout({ bookingId, currency, depositLabel }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
+  // Opt-in: save the customer's PayPal wallet so later deposits and no-show fees need no popup.
+  const [savePayment, setSavePayment] = useState(false);
   const sessionRef = useRef<PayPalOneTimePaymentSession | null>(null);
   const buttonRef = useRef<HTMLElement | null>(null);
 
   const createOrder = useCallback(
-    () => postJson<{ orderId: string }>(`/api/bookings/${bookingId}/deposit/order`),
-    [bookingId],
+    () => postJson<{ orderId: string }>(`/api/bookings/${bookingId}/deposit/order`, { savePayment }),
+    [bookingId, savePayment],
   );
 
   useEffect(() => {
@@ -68,6 +70,8 @@ export function DepositCheckout({ bookingId, currency, depositLabel }: Props) {
     };
 
     async function setUp() {
+      // Re-run when the save-wallet choice changes: the v6 session takes it at creation.
+      update({ kind: 'loading' });
       try {
         const configResponse = await fetch('/api/paypal/config');
         const config = (await configResponse.json()) as {
@@ -112,6 +116,7 @@ export function DepositCheckout({ bookingId, currency, depositLabel }: Props) {
           onCancel: () => update({ kind: 'ready' }),
           onError: (error) =>
             update({ kind: 'error', message: error.message ?? 'PayPal reported an error.' }),
+          ...(savePayment ? { savePayment: true } : {}),
         });
         if (cancelled) return;
         sessionRef.current = session;
@@ -131,7 +136,7 @@ export function DepositCheckout({ bookingId, currency, depositLabel }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [bookingId, currency]);
+  }, [bookingId, currency, savePayment]);
 
   useEffect(() => {
     const button = buttonRef.current;
@@ -157,6 +162,18 @@ export function DepositCheckout({ bookingId, currency, depositLabel }: Props) {
         nothing is charged unless you miss the appointment.
       </p>
       {phase.kind === 'loading' && <p>Loading PayPal…</p>}
+      {(phase.kind === 'ready' || phase.kind === 'loading') && (
+        <label>
+          <input
+            type="checkbox"
+            checked={savePayment}
+            disabled={phase.kind === 'loading'}
+            onChange={(event) => setSavePayment(event.target.checked)}
+          />{' '}
+          Save my PayPal account with SlotKeeper, so future deposits and no-show fees can be charged
+          without asking me again.
+        </label>
+      )}
       <paypal-button ref={buttonRef} type="pay" class="paypal-gold" hidden={phase.kind !== 'ready'} />
       {phase.kind === 'working' && <p>{phase.message}</p>}
       {phase.kind === 'held' && (

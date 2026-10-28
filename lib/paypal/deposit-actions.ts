@@ -3,8 +3,15 @@ import {
   ArgumentsValidationError,
   AuthorizationStatus,
   CaptureStatus,
+  CheckoutPaymentIntent,
+  OrderStatus,
+  PaymentInitiator,
   RefundStatus,
+  StoredPaymentSourceUsageType,
+  UsagePattern,
+  type OrdersController,
   type PaymentsController,
+  type VaultController,
 } from '@paypal/paypal-server-sdk';
 import { formatAmount, type Money } from '@/lib/booking/catalog';
 import { withBookingLock } from '@/lib/booking/locks';
@@ -649,5 +656,201 @@ export function refundDeposit(
       { status: fullyRefunded ? 'refunded' : 'partially_refunded' },
       { refunds },
     );
+  });
+}
+
+export interface WalletPayPal {
+  orders: Pick<OrdersController, 'createOrder'>;
+  vault: Pick<VaultController, 'listCustomerPaymentTokens'>;
+}
+
+/**
+ * Only after the hold is finished: its capture was final (final_capture), so it can't be captured
+ * again. While a hold exists, staff capture the hold instead; charging the wallet as well would let
+ * the customer pay the deposit twice.
+ */
+const WALLET_CHARGEABLE: BookingStatus[] = ['completed', 'no_show_charged'];
+const FAILED_CHARGE = new Set<string>([CaptureStatus.Declined, CaptureStatus.Failed]);
+
+/**
+ * PayPal reports APPROVED instead of VAULTED when it hasn't finished storing the wallet. Before a
+ * charge, ask PayPal for the customer's saved tokens and use the PayPal one if it is there now.
+ */
+async function ensureVaulted(
+  paypal: WalletPayPal,
+  store: BookingStore,
+  booking: HeldBooking,
+): Promise<HeldBooking> {
+  const wallet = booking.hold.savedWallet;
+  if (wallet?.status === 'VAULTED' && wallet.vaultId) return booking;
+  if (!wallet?.customerId) {
+    throw new DepositError(
+      'invalid_state',
+      409,
+      `The saved PayPal wallet is not ready to charge (vault status ${wallet?.status ?? 'unknown'}).`,
+    );
+  }
+  let tokens;
+  try {
+    tokens = (await paypal.vault.listCustomerPaymentTokens({ customerId: wallet.customerId })).result.paymentTokens;
+  } catch (err) {
+    const failure = describePayPalError(err);
+    if (failure && failure.status < 500) {
+      throw new DepositError('invalid_state', 409, 'PayPal has no saved wallet for this customer yet.', failure);
+    }
+    if (failure) throw new DepositError('paypal_error', 502, 'PayPal could not list the saved wallet. Please retry.', failure);
+    if (isNetworkError(err)) {
+      console.error('[paypal] vault lookup could not reach PayPal', { bookingId: booking.id, reason: describeTransportError(err) });
+      throw new DepositError('network_error', 502, 'Could not reach PayPal. Please retry.');
+    }
+    throw sanitizeError(err, 'List saved wallet');
+  }
+  const token =
+    tokens?.find((t) => t.id === wallet.vaultId && t.paymentSource?.paypal) ??
+    tokens?.find((t) => t.paymentSource?.paypal);
+  if (!token?.id) {
+    throw new DepositError(
+      'invalid_state',
+      409,
+      `The saved PayPal wallet is not ready to charge (vault status ${wallet.status ?? 'unknown'}).`,
+    );
+  }
+  const updated: HeldBooking = {
+    ...booking,
+    hold: { ...booking.hold, savedWallet: { ...wallet, vaultId: token.id, status: 'VAULTED' } },
+  };
+  store.save(updated);
+  return updated;
+}
+
+/**
+ * Charges the customer's saved PayPal wallet while they are not present (merchant-initiated): a new
+ * Orders v2 order with intent CAPTURE paid by the vault id, which PayPal completes without a popup.
+ * Marked as a subsequent merchant-initiated use of the stored credential the customer agreed to at
+ * checkout. One charge per booking, and together with any captured deposit it can't exceed the
+ * deposit amount: a repeated click or a client retry after success is refused, not charged again.
+ * The booking's status is left as it is.
+ */
+export function chargeSavedWallet(
+  paypal: WalletPayPal,
+  store: BookingStore,
+  bookingId: string,
+  request: { amountCents?: number },
+  now: Date = new Date(),
+): Promise<Booking> {
+  return withBookingLock(bookingId, async () => {
+    let booking = loadHeldBooking(store, bookingId);
+    const replaying = booking.hold.pendingAction?.kind === 'wallet_charge';
+    if (!booking.hold.savedWallet) {
+      throw new DepositError(
+        'invalid_state',
+        409,
+        'This customer did not save their PayPal wallet, so it cannot be charged without them.',
+      );
+    }
+
+    const depositCents = booking.deposit.cents;
+    let amountCents: number | undefined = request.amountCents;
+    if (!replaying) {
+      requireStatus(booking, WALLET_CHARGEABLE, 'charge the saved wallet for');
+      if (booking.hold.walletCharges?.some((c) => !FAILED_CHARGE.has(c.status))) {
+        throw new DepositError('invalid_state', 409, 'The saved wallet was already charged for this booking.');
+      }
+      const remaining = depositCents - (booking.hold.capture?.amountCents ?? 0);
+      if (remaining < 1) {
+        throw new DepositError('invalid_state', 409, 'The deposit was already captured in full; nothing is left to charge.');
+      }
+      amountCents = request.amountCents ?? remaining;
+      if (!Number.isInteger(amountCents) || amountCents < 1 || amountCents > remaining) {
+        throw new DepositError(
+          'invalid_amount',
+          400,
+          `The charge must be a whole number of cents between 1 and ${remaining}.`,
+        );
+      }
+      booking = await ensureVaulted(paypal, store, booking);
+    }
+
+    const vaultId = booking.hold.savedWallet!.vaultId!;
+    const orders = paypal.orders;
+    const sequence = (booking.hold.walletCharges?.length ?? 0) + 1;
+    const { result: order, params } = await runMoneyAction(
+      store,
+      booking,
+      {
+        kind: 'wallet_charge',
+        targetId: `${booking.id}-${sequence}`,
+        params: { amountCents },
+        label: 'charge the saved PayPal wallet',
+        call: async (requestId, effective, attempt) =>
+          (
+            await orders.createOrder({
+              paypalRequestId: requestId,
+              prefer: 'return=representation',
+              body: {
+                intent: CheckoutPaymentIntent.Capture,
+                purchaseUnits: [
+                  {
+                    referenceId: booking.id,
+                    customId: booking.id,
+                    invoiceId: `${booking.id}-wallet-${sequence}-${attempt}`,
+                    description: 'SlotKeeper charge for your appointment',
+                    amount: toMoney(booking.deposit.currency, effective.amountCents!),
+                  },
+                ],
+                paymentSource: {
+                  paypal: {
+                    vaultId,
+                    storedCredential: {
+                      paymentInitiator: PaymentInitiator.Merchant,
+                      usage: StoredPaymentSourceUsageType.Subsequent,
+                      usagePattern: UsagePattern.UnscheduledPostpaid,
+                    },
+                  },
+                },
+              },
+            })
+          ).result,
+        isReadable: (result) => Boolean(result?.id),
+      },
+      now,
+    );
+
+    const capture = order.purchaseUnits?.[0]?.payments?.captures?.[0];
+    const took = capture?.status === CaptureStatus.Completed || capture?.status === CaptureStatus.Pending;
+    if (order.status !== OrderStatus.Completed || !capture?.id || !took) {
+      // E.g. PAYER_ACTION_REQUIRED: PayPal wants the customer present for this charge.
+      console.error('[paypal] saved wallet charge not completed', {
+        bookingId,
+        orderId: order.id,
+        orderStatus: order.status,
+        captureStatus: capture?.status,
+      });
+      saveFailedAttempt(store, booking, 'wallet_charge');
+      throw new DepositError(
+        'declined',
+        402,
+        `PayPal did not complete the charge (order ${order.status ?? 'unknown'}, capture ${capture?.status ?? 'none'}).`,
+      );
+    }
+
+    const charge = {
+      orderId: order.id!,
+      captureId: capture.id,
+      amountCents: parseCents(capture.amount?.value) ?? params.amountCents!,
+      status: capture.status!,
+      chargedAt: now.toISOString(),
+    };
+    const charges = [...(booking.hold.walletCharges ?? []), charge];
+    if (charge.amountCents !== params.amountCents || capture.amount?.currencyCode !== booking.deposit.currency) {
+      console.error('[paypal] saved wallet charged a different amount; needs review', { bookingId, orderId: order.id });
+      saveSettled(store, booking, { status: 'deposit_needs_review' }, { walletCharges: charges });
+      throw new DepositError(
+        'amount_mismatch',
+        502,
+        'PayPal charged a different amount than requested. Staff will review it.',
+      );
+    }
+    return saveSettled(store, booking, {}, { walletCharges: charges });
   });
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { errorResponse, readJsonObject } from '@/lib/api/responses';
+import { errorResponse, publicBooking, readJsonObject } from '@/lib/api/responses';
 import { BookingInputError } from '@/lib/booking/bookings';
 import { getBookingStore } from '@/lib/booking/store';
 import { getOrdersController } from '@/lib/paypal/client';
@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       throw new BookingInputError('orderId is required.');
     }
     const booking = await authorizeDeposit(getOrdersController(), getBookingStore(), id, body.orderId);
-    return NextResponse.json(booking);
+    return NextResponse.json(publicBooking(booking));
   } catch (err) {
     return errorResponse(err);
   }

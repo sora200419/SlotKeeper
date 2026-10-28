@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { publicBooking } from '@/lib/api/responses';
 import { getBookingStore } from '@/lib/booking/store';
 
 export const runtime = 'nodejs';
@@ -10,5 +11,5 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   if (!booking) {
     return NextResponse.json({ error: 'booking_not_found', message: 'Booking not found.' }, { status: 404 });
   }
-  return NextResponse.json(booking);
+  return NextResponse.json(publicBooking(booking));
 }

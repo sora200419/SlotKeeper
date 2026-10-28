@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { errorResponse } from '@/lib/api/responses';
+import { errorResponse, readOptionalJsonObject } from '@/lib/api/responses';
+import { BookingInputError } from '@/lib/booking/bookings';
 import { getBookingStore } from '@/lib/booking/store';
 import { getOrdersController } from '@/lib/paypal/client';
 import { PayPalConfigError } from '@/lib/paypal/config';
@@ -28,15 +29,30 @@ function appOrigin(request: Request): string {
   return new URL(request.url).origin;
 }
 
-/** Called by the JS SDK v6 session's order promise. Returns { orderId }. */
+/**
+ * Called by the JS SDK v6 session's order promise. Optional JSON body { savePayment: true } when the
+ * customer agreed to save their PayPal wallet. Returns { orderId }.
+ */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
     const origin = appOrigin(request);
-    const result = await createDepositOrder(getOrdersController(), getBookingStore(), id, {
-      returnUrl: `${origin}/book/${id}?paypal=return`,
-      cancelUrl: `${origin}/book/${id}?paypal=cancel`,
-    });
+    // Empty body (older clients send none): no wallet saving.
+    const body = await readOptionalJsonObject(request);
+    if (body.savePayment !== undefined && typeof body.savePayment !== 'boolean') {
+      throw new BookingInputError('savePayment must be true or false.');
+    }
+    const result = await createDepositOrder(
+      getOrdersController(),
+      getBookingStore(),
+      id,
+      {
+        returnUrl: `${origin}/book/${id}?paypal=return`,
+        cancelUrl: `${origin}/book/${id}?paypal=cancel`,
+      },
+      new Date(),
+      { savePayment: body.savePayment === true },
+    );
     return NextResponse.json(result);
   } catch (err) {
     return errorResponse(err);

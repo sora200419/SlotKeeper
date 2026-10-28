@@ -3,6 +3,7 @@ import {
   Client,
   OrdersController,
   PaymentsController,
+  VaultController,
   type Configuration,
 } from '@paypal/paypal-server-sdk';
 import { readPayPalSettings, type PayPalSettings } from './config';
@@ -58,4 +59,8 @@ export function getOrdersController(): OrdersController {
 
 export function getPaymentsController(): PaymentsController {
   return new PaymentsController(getPayPalClient());
+}
+
+export function getVaultController(): VaultController {
+  return new VaultController(getPayPalClient());
 }

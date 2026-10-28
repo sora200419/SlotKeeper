@@ -269,6 +269,10 @@ function applyCapture(
   const took = capture.status === CaptureStatus.Completed || capture.status === CaptureStatus.Pending;
   const cents = parseCents(capture.amount?.value);
 
+  // A charge of the saved wallet (its own order, so no authorization link).
+  const wallet = applyWalletCapture(store, booking, capture, now);
+  if (wallet) return wallet;
+
   // Our own capture: PayPal finished processing it (e.g. PENDING -> COMPLETED, or declined).
   const recorded = hold.capture;
   if (recorded && recorded.captureId === capture.id) {
@@ -320,6 +324,56 @@ function applyCapture(
     });
   }
   return { result: 'unchanged', bookingId };
+}
+
+/**
+ * Settles saved-wallet charges: a recorded one PayPal finished processing, or the staff charge whose
+ * answer we never saw. The latter is matched on the exact invoice id that charge sent (it carries
+ * the same `<sequence>-<attempt>` as its PayPal-Request-Id). Returns undefined when the capture is
+ * not a wallet charge of this booking.
+ */
+function applyWalletCapture(
+  store: BookingStore,
+  booking: Booking & { hold: DepositHold },
+  capture: CapturedPayment,
+  now: Date,
+): WebhookOutcome | undefined {
+  const hold = booking.hold;
+  const bookingId = booking.id;
+  const failed = capture.status === CaptureStatus.Declined || capture.status === CaptureStatus.Failed;
+  const charges = [...(hold.walletCharges ?? [])];
+  const known = charges.findIndex((c) => c.captureId === capture.id);
+  if (known >= 0) {
+    if (charges[known].status === capture.status) return { result: 'unchanged', bookingId };
+    charges[known] = { ...charges[known], status: capture.status ?? charges[known].status };
+    if (failed) console.error('[webhook] wallet charge declined after being recorded; needs review', { bookingId });
+    return save(store, booking, failed ? 'deposit_needs_review' : booking.status, { walletCharges: charges });
+  }
+
+  const pending = hold.pendingAction?.kind === 'wallet_charge' ? hold.pendingAction : undefined;
+  const prefix = `slotkeeper-wallet_charge-${bookingId}-`;
+  if (!pending?.requestId.startsWith(prefix)) return undefined;
+  if (capture.invoiceId !== `${bookingId}-wallet-${pending.requestId.slice(prefix.length)}`) return undefined;
+
+  if (failed) {
+    return save(store, booking, booking.status, {
+      pendingAction: undefined,
+      actionAttempts: { ...hold.actionAttempts, wallet_charge: (hold.actionAttempts?.wallet_charge ?? 1) + 1 },
+    });
+  }
+  const cents = parseCents(capture.amount?.value);
+  charges.push({
+    orderId: capture.supplementaryData?.relatedIds?.orderId ?? '',
+    captureId: capture.id!,
+    amountCents: cents ?? pending.amountCents!,
+    status: capture.status ?? 'UNKNOWN',
+    chargedAt: now.toISOString(),
+  });
+  const matches = cents === pending.amountCents && capture.amount?.currencyCode === booking.deposit.currency;
+  return save(store, booking, matches ? booking.status : 'deposit_needs_review', {
+    walletCharges: charges,
+    pendingAction: undefined,
+  });
 }
 
 const CAPTURED: BookingStatus[] = ['completed', 'no_show_charged', 'partially_refunded', 'refunded'];

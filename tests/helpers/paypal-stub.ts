@@ -1,4 +1,10 @@
-import { Client, Environment, OrdersController, PaymentsController } from '@paypal/paypal-server-sdk';
+import {
+  Client,
+  Environment,
+  OrdersController,
+  PaymentsController,
+  VaultController,
+} from '@paypal/paypal-server-sdk';
 
 export type Reply = { status: number; body?: unknown } | { throw: Error };
 export type CapturedRequest = { method: string; url: string; headers: Record<string, string>; body: any };
@@ -51,6 +57,7 @@ export function stubPayPal(...replies: Reply[]) {
   return {
     orders: new OrdersController(client),
     payments: new PaymentsController(client),
+    vault: new VaultController(client),
     requests,
     remaining: () => queue.length,
   };

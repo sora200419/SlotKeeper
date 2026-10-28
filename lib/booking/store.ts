@@ -25,7 +25,28 @@ export type BookingStatus =
   /** All captured money was refunded. */
   | 'refunded';
 
-export type MoneyActionKind = 'capture' | 'void' | 'reauthorize' | 'refund';
+export type MoneyActionKind = 'capture' | 'void' | 'reauthorize' | 'refund' | 'wallet_charge';
+
+/** The customer's PayPal wallet, saved in PayPal's vault during their deposit checkout (opt-in). */
+export interface SavedWallet {
+  /** PayPal payment token id; later orders are charged with it while the customer is away. */
+  vaultId?: string;
+  /** PayPal vault status, e.g. VAULTED (usable) or APPROVED (not yet stored). */
+  status?: string;
+  /** PayPal's customer id for the vault, needed to list or delete the customer's tokens. */
+  customerId?: string;
+  savedAt: string;
+}
+
+/** A merchant-initiated charge of the saved wallet (a separate PayPal order, captured at once). */
+export interface WalletCharge {
+  orderId: string;
+  captureId: string;
+  amountCents: number;
+  /** PayPal capture status, e.g. COMPLETED or PENDING. */
+  status: string;
+  chargedAt: string;
+}
 
 /**
  * A money call whose outcome we never saw (5xx, no response, unreadable 2xx). It must be replayed
@@ -85,6 +106,10 @@ export interface DepositHold {
   pendingAction?: PendingMoneyAction;
   /** Part of each money call's PayPal-Request-Id; bumped after a definite failure. */
   actionAttempts?: Partial<Record<MoneyActionKind, number>>;
+  /** The order was created asking PayPal to save the wallet (the customer opted in). */
+  savePayment?: boolean;
+  savedWallet?: SavedWallet;
+  walletCharges?: WalletCharge[];
 }
 
 export interface Booking {

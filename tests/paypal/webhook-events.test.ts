@@ -364,6 +364,88 @@ describe('PAYMENT.CAPTURE.*', () => {
   });
 });
 
+describe('PAYMENT.CAPTURE.* for saved-wallet charges (R3)', () => {
+  const walletCapture = (bookingId: string, status: string, invoiceId: string, value = '4.00') =>
+    ok({
+      id: 'CAP-W1',
+      status,
+      custom_id: bookingId,
+      invoice_id: invoiceId,
+      amount: { currency_code: 'USD', value },
+      supplementary_data: { related_ids: { order_id: 'ORDER-W1' } },
+    });
+  const charged = (status: string) => ({
+    orderId: 'ORDER-W1',
+    captureId: 'CAP-W1',
+    amountCents: 400,
+    status,
+    chargedAt: NOW.toISOString(),
+  });
+
+  it('updates a recorded PENDING wallet charge to COMPLETED', async () => {
+    const store = createMemoryBookingStore();
+    const b = booking(store, 'deposit_held', { walletCharges: [charged('PENDING')] });
+    const paypal = stubPayPal(...twice(walletCapture(b.id, 'COMPLETED', `${b.id}-wallet-1-1`)));
+    await handleWebhookEvent(paypal, store, event('PAYMENT.CAPTURE.COMPLETED', { id: 'CAP-W1' }), NOW);
+    expect(store.get(b.id)).toMatchObject({ status: 'deposit_held', hold: { walletCharges: [{ status: 'COMPLETED' }] } });
+  });
+
+  it('sends a recorded wallet charge that PayPal later declined to staff review', async () => {
+    const store = createMemoryBookingStore();
+    const b = booking(store, 'deposit_held', { walletCharges: [charged('PENDING')] });
+    const paypal = stubPayPal(...twice(walletCapture(b.id, 'DECLINED', `${b.id}-wallet-1-1`)));
+    await handleWebhookEvent(paypal, store, event('PAYMENT.CAPTURE.DECLINED', { id: 'CAP-W1' }), NOW);
+    expect(store.get(b.id)).toMatchObject({
+      status: 'deposit_needs_review',
+      hold: { walletCharges: [{ status: 'DECLINED' }] },
+    });
+  });
+
+  it('settles a wallet charge whose answer was lost, matched on its exact invoice id', async () => {
+    const store = createMemoryBookingStore();
+    const b = booking(store, 'deposit_held', {
+      pendingAction: {
+        kind: 'wallet_charge',
+        requestId: '',
+        amountCents: 400,
+        since: NOW.toISOString(),
+      },
+    });
+    const pending = store.get(b.id)!;
+    store.save({
+      ...pending,
+      hold: { ...pending.hold!, pendingAction: { ...pending.hold!.pendingAction!, requestId: `slotkeeper-wallet_charge-${b.id}-1-1` } },
+    });
+    const paypal = stubPayPal(...twice(walletCapture(b.id, 'COMPLETED', `${b.id}-wallet-1-1`)));
+    await handleWebhookEvent(paypal, store, event('PAYMENT.CAPTURE.COMPLETED', { id: 'CAP-W1' }), NOW);
+    const saved = store.get(b.id)!;
+    expect(saved.status).toBe('deposit_held');
+    expect(saved.hold!.pendingAction).toBeUndefined();
+    expect(saved.hold!.walletCharges).toMatchObject([{ orderId: 'ORDER-W1', captureId: 'CAP-W1', amountCents: 400 }]);
+  });
+
+  it('a wallet capture with another invoice id does not settle the pending charge', async () => {
+    const store = createMemoryBookingStore();
+    const created = booking(store, 'deposit_held');
+    store.save({
+      ...created,
+      hold: {
+        ...created.hold!,
+        pendingAction: {
+          kind: 'wallet_charge',
+          requestId: `slotkeeper-wallet_charge-${created.id}-2-1`,
+          amountCents: 400,
+          since: NOW.toISOString(),
+        },
+      },
+    });
+    const paypal = stubPayPal(...twice(walletCapture(created.id, 'COMPLETED', `${created.id}-wallet-1-1`)));
+    await handleWebhookEvent(paypal, store, event('PAYMENT.CAPTURE.COMPLETED', { id: 'CAP-W1' }), NOW);
+    expect(store.get(created.id)!.hold!.pendingAction).toMatchObject({ kind: 'wallet_charge' });
+    expect(store.get(created.id)!.hold!.walletCharges).toBeUndefined();
+  });
+});
+
 describe('PAYMENT.CAPTURE.REFUNDED', () => {
   it('updates a known refund\'s status', async () => {
     const store = createMemoryBookingStore();

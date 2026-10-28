@@ -3,7 +3,11 @@ import {
   AuthorizationStatus,
   CheckoutPaymentIntent,
   PaypalExperienceUserAction,
+  PaypalPaymentTokenCustomerType,
+  PaypalPaymentTokenUsageType,
   PaypalWalletContextShippingPreference,
+  StoreInVaultInstruction,
+  UsagePattern,
   type OrderRequest,
   type OrdersController,
 } from '@paypal/paypal-server-sdk';
@@ -68,13 +72,41 @@ const orderRequestId = (bookingId: string, attempt: number) =>
 const authorizeRequestId = (orderId: string, attempt: number) =>
   `slotkeeper-deposit-authorize-${orderId}-${attempt}`;
 
+export interface CheckoutOptions {
+  /** The customer agreed to save their PayPal wallet for later merchant-initiated charges. */
+  savePayment?: boolean;
+}
+
+/** Shown to the customer by PayPal when they agree to save their wallet. */
+const VAULT_DESCRIPTION = 'SlotKeeper may charge future booking deposits and no-show fees.';
+
 /**
  * Orders v2 request for a deposit hold: intent AUTHORIZE, amount from the server-side catalog,
- * no shipping (it's a service), booking id on the purchase unit for reconciliation.
+ * no shipping (it's a service), booking id on the purchase unit for reconciliation. With
+ * `savePayment`, PayPal also stores the wallet once the authorization succeeds (ON_SUCCESS), as a
+ * merchant token for unscheduled charges made after the appointment (no-show fees, later deposits).
  */
-export function buildDepositOrderRequest(booking: Booking, urls: ReturnUrls): OrderRequest {
+export function buildDepositOrderRequest(
+  booking: Booking,
+  urls: ReturnUrls,
+  options: CheckoutOptions = {},
+): OrderRequest {
   const service = findService(booking.serviceId);
   if (!service) throw new DepositError('invalid_state', 409, `Unknown service ${booking.serviceId}.`);
+  const vault = options.savePayment
+    ? {
+        attributes: {
+          vault: {
+            storeInVault: StoreInVaultInstruction.OnSuccess,
+            usageType: PaypalPaymentTokenUsageType.Merchant,
+            customerType: PaypalPaymentTokenCustomerType.Consumer,
+            usagePattern: UsagePattern.UnscheduledPostpaid,
+            description: VAULT_DESCRIPTION,
+            permitMultiplePaymentTokens: false,
+          },
+        },
+      }
+    : {};
   return {
     intent: CheckoutPaymentIntent.Authorize,
     purchaseUnits: [
@@ -97,6 +129,7 @@ export function buildDepositOrderRequest(booking: Booking, urls: ReturnUrls): Or
           returnUrl: urls.returnUrl,
           cancelUrl: urls.cancelUrl,
         },
+        ...vault,
       },
     },
   };
@@ -166,8 +199,13 @@ export function createDepositOrder(
   bookingId: string,
   urls: ReturnUrls,
   now: Date = new Date(),
+  options: CheckoutOptions = {},
 ): Promise<{ orderId: string }> {
-  return withBookingLock(bookingId, () => createDepositOrderLocked(orders, store, bookingId, urls, now), 'wait');
+  return withBookingLock(
+    bookingId,
+    () => createDepositOrderLocked(orders, store, bookingId, urls, now, options),
+    'wait',
+  );
 }
 
 async function createDepositOrderLocked(
@@ -176,7 +214,9 @@ async function createDepositOrderLocked(
   bookingId: string,
   urls: ReturnUrls,
   now: Date,
+  options: CheckoutOptions,
 ): Promise<{ orderId: string }> {
+  const savePayment = options.savePayment === true;
   let booking = loadBooking(store, bookingId);
   if (booking.status !== 'awaiting_deposit') {
     throw notAwaitingDeposit(booking);
@@ -199,9 +239,12 @@ async function createDepositOrderLocked(
   }
 
   const existing = booking.hold;
+  // An order is only reused if it asks for the same thing: ticking or unticking "save my PayPal"
+  // changes the order body, so it needs a new order.
   if (
     existing &&
     !existing.orderSpent &&
+    (existing.savePayment ?? false) === savePayment &&
     now.getTime() - Date.parse(existing.orderCreatedAt) < ORDER_REUSE_MS
   ) {
     return { orderId: existing.paypalOrderId };
@@ -209,7 +252,7 @@ async function createDepositOrderLocked(
 
   const attempt = (existing?.orderAttempt ?? 0) + 1;
   // Built outside the try: a local problem (e.g. unknown service) must not be mistaken for a PayPal failure.
-  const body = buildDepositOrderRequest(booking, urls);
+  const body = buildDepositOrderRequest(booking, urls, { savePayment });
   let orderId: string | undefined;
   try {
     const response = await orders.createOrder({
@@ -230,7 +273,12 @@ async function createDepositOrderLocked(
 
   store.save({
     ...booking,
-    hold: { paypalOrderId: orderId, orderAttempt: attempt, orderCreatedAt: now.toISOString() },
+    hold: {
+      paypalOrderId: orderId,
+      orderAttempt: attempt,
+      orderCreatedAt: now.toISOString(),
+      ...(savePayment ? { savePayment: true } : {}),
+    },
   });
   return { orderId };
 }
@@ -363,12 +411,32 @@ async function runAuthorize(
     throw new DepositError('paypal_error', 502, 'PayPal did not return an authorization.');
   }
 
+  // With savePayment, PayPal stores the wallet once the authorization succeeds and reports the
+  // payment token here (status VAULTED), or APPROVED if storing is still pending.
+  const vault = result?.paymentSource?.paypal?.attributes?.vault;
+  if (hold.savePayment && !vault?.id) {
+    console.error('[paypal] wallet was not saved although the customer opted in', {
+      bookingId: booking.id,
+      orderId: hold.paypalOrderId,
+      vaultStatus: vault?.status,
+    });
+  }
   const recorded: Partial<DepositHold> = {
     authorizeOutcomeUnknown: false,
     authorizationId: authorization.id,
     authorizationStatus: authorization.status,
     expiresAt: authorization.expirationTime,
     heldAt: now.toISOString(),
+    ...(vault?.id || vault?.status
+      ? {
+          savedWallet: {
+            vaultId: vault.id,
+            status: vault.status,
+            customerId: vault.customer?.id,
+            savedAt: now.toISOString(),
+          },
+        }
+      : {}),
   };
 
   const expected = formatAmount(booking.deposit);

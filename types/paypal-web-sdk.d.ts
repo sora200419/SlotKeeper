@@ -19,6 +19,8 @@ declare global {
       onApprove: (data: { orderId: string; payerId?: string }) => Promise<void> | void;
       onCancel?: (data: { orderId?: string }) => void;
       onError?: (error: { code?: string; message?: string }) => void;
+      /** Save the buyer's PayPal wallet during this purchase (the order also carries vault fields). */
+      savePayment?: boolean;
     }): PayPalOneTimePaymentSession;
   }
 
