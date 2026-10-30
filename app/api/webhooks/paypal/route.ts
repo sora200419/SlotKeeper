@@ -3,6 +3,7 @@ import { errorResponse } from '@/lib/api/responses';
 import { getBookingStore } from '@/lib/booking/store';
 import { getOrdersController, getPaymentsController } from '@/lib/paypal/client';
 import { PayPalConfigError } from '@/lib/paypal/config';
+import { getPayoutDeps } from '@/lib/paypal/payout-deps';
 import {
   handleWebhookEvent,
   parseWebhookEvent,
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
     const event = parseWebhookEvent(rawBody);
     const outcome = await processWebhookOnce(event.id, () =>
       handleWebhookEvent(
-        { orders: getOrdersController(), payments: getPaymentsController() },
+        { orders: getOrdersController(), payments: getPaymentsController(), payouts: getPayoutDeps },
         getBookingStore(),
         event,
       ),

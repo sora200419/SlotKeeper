@@ -21,6 +21,7 @@ export interface PayPalSettings {
 }
 
 const DEFAULT_TIMEOUT_MS = 15_000;
+const MAX_TIMEOUT_MS = 60_000;
 
 type Env = Record<string, string | undefined>;
 
@@ -66,9 +67,11 @@ export function readPayPalSettings(env: Env = process.env): PayPalSettings {
   let timeoutMs = DEFAULT_TIMEOUT_MS;
   if (rawTimeout) {
     timeoutMs = Number(rawTimeout);
-    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0) {
+    // Capped: end-of-day payouts wait 15 minutes for in-flight money requests (PAYOUT_GRACE_MS),
+    // which only holds while a request plus one retry stays well below that.
+    if (!Number.isInteger(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMEOUT_MS) {
       throw new PayPalConfigError(
-        `PAYPAL_TIMEOUT_MS must be a positive integer (milliseconds), got "${rawTimeout}".`,
+        `PAYPAL_TIMEOUT_MS must be a whole number of milliseconds between 1 and ${MAX_TIMEOUT_MS}, got "${rawTimeout}".`,
       );
     }
   }

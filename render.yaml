@@ -34,3 +34,9 @@ services:
       # The public URL, e.g. https://slotkeeper.onrender.com (PayPal return/cancel links).
       - key: APP_URL
         sync: false
+      # End-of-day payouts: "maria=<email>,ken=<email>" (sandbox personal accounts).
+      - key: STAFF_PAYOUT_EMAILS
+        sync: false
+      # The business day for payouts.
+      - key: BUSINESS_TIME_ZONE
+        value: America/Los_Angeles

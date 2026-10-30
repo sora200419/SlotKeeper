@@ -1,7 +1,9 @@
 import 'server-only';
 import {
   Client,
+  Environment,
   OrdersController,
+  type OAuthToken,
   PaymentsController,
   VaultController,
   type Configuration,
@@ -45,10 +47,44 @@ export function createPayPalClient(settings: PayPalSettings): Client {
 }
 
 let sharedClient: Client | undefined;
+let sharedToken: OAuthToken | undefined;
 
-/** One long-lived client per server process, so the OAuth token is cached and reused. */
+/**
+ * An access token for PayPal REST endpoints the SDK doesn't cover (Payouts). Uses the SDK's own
+ * token manager: the last token the SDK obtained is reused while valid (with the same clock skew),
+ * otherwise a new one is fetched. `forceRefresh` after a 401 drops a token PayPal no longer accepts.
+ */
+export async function getAccessToken(forceRefresh = false): Promise<string> {
+  const manager = getPayPalClient().clientCredentialsAuthManager;
+  sharedToken = await manager.updateToken(forceRefresh ? undefined : sharedToken);
+  return sharedToken.accessToken;
+}
+
+/** REST base URL matching the SDK environment. */
+export function restBaseUrl(): string {
+  return readPayPalSettings().environment === Environment.Production
+    ? 'https://api-m.paypal.com'
+    : 'https://api-m.sandbox.paypal.com';
+}
+
+/**
+ * One long-lived client per server process, so the OAuth token is cached and reused. Only this
+ * client shares its token with our REST calls (Payouts has no SDK support); clients built elsewhere,
+ * possibly with other credentials, never touch the shared token.
+ */
 export function getPayPalClient(): Client {
-  sharedClient ??= createPayPalClient(readPayPalSettings());
+  if (!sharedClient) {
+    const config = buildClientConfiguration(readPayPalSettings());
+    sharedClient = new Client({
+      ...config,
+      clientCredentialsAuthCredentials: {
+        ...config.clientCredentialsAuthCredentials!,
+        oAuthOnTokenUpdate: (token) => {
+          sharedToken = token;
+        },
+      },
+    });
+  }
   return sharedClient;
 }
 

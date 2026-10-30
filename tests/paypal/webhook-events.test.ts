@@ -15,6 +15,7 @@ import {
   type WebhookEvent,
   type WebhookPayPal,
 } from '@/lib/paypal/webhook-events';
+import { createMemoryPayoutStore, type PayoutDeps } from '@/lib/paypal/payouts';
 import { WebhookRetryableError } from '@/lib/paypal/webhook-signature';
 import { networkDrop, stubPayPal, type Reply } from '../helpers/paypal-stub';
 
@@ -241,13 +242,16 @@ describe('PAYMENT.AUTHORIZATION.*', () => {
 });
 
 describe('PAYMENT.CAPTURE.*', () => {
-  it('updates a recorded PENDING capture to COMPLETED', async () => {
+  it('updates a recorded PENDING capture to COMPLETED and records when it completed', async () => {
     const store = createMemoryBookingStore();
     const b = booking(store, 'completed', { capture: recordedCapture('PENDING') });
     const paypal = stubPayPal(...twice(capture(b.id, 'COMPLETED')));
     await handleWebhookEvent(paypal, store, event('PAYMENT.CAPTURE.COMPLETED', { id: 'CAP-1' }), NOW);
     expect(paypal.requests[0].url).toBe(`${API}/v2/payments/captures/CAP-1`);
-    expect(store.get(b.id)).toMatchObject({ status: 'completed', hold: { capture: { status: 'COMPLETED' } } });
+    expect(store.get(b.id)).toMatchObject({
+      status: 'completed',
+      hold: { capture: { status: 'COMPLETED', settledAt: NOW.toISOString() } },
+    });
   });
 
   it('sends a recorded capture that PayPal later declined to staff review', async () => {
@@ -390,6 +394,14 @@ describe('PAYMENT.CAPTURE.* for saved-wallet charges (R3)', () => {
     expect(store.get(b.id)).toMatchObject({ status: 'deposit_held', hold: { walletCharges: [{ status: 'COMPLETED' }] } });
   });
 
+  it('records when a PENDING wallet charge completed (payouts count it on that day)', async () => {
+    const store = createMemoryBookingStore();
+    const b = booking(store, 'deposit_held', { walletCharges: [charged('PENDING')] });
+    const paypal = stubPayPal(...twice(walletCapture(b.id, 'COMPLETED', `${b.id}-wallet-1-1`)));
+    await handleWebhookEvent(paypal, store, event('PAYMENT.CAPTURE.COMPLETED', { id: 'CAP-W1' }), NOW);
+    expect(store.get(b.id)!.hold!.walletCharges![0]).toMatchObject({ status: 'COMPLETED', settledAt: NOW.toISOString() });
+  });
+
   it('sends a recorded wallet charge that PayPal later declined to staff review', async () => {
     const store = createMemoryBookingStore();
     const b = booking(store, 'deposit_held', { walletCharges: [charged('PENDING')] });
@@ -446,7 +458,79 @@ describe('PAYMENT.CAPTURE.* for saved-wallet charges (R3)', () => {
   });
 });
 
+describe('PAYMENT.PAYOUTS-ITEM.* / PAYMENT.PAYOUTSBATCH.*', () => {
+  function payoutDeps(batchReply: unknown) {
+    const calls: string[] = [];
+    const payouts = createMemoryPayoutStore();
+    payouts.save({
+      day: '2026-11-01',
+      timeZone: 'UTC',
+      senderBatchId: 'slotkeeper-payouts-2026-11-01',
+      attempt: 1,
+      state: 'submitted',
+      payoutBatchId: 'BATCH-1',
+      batchStatus: 'PENDING',
+      items: [
+        { staffId: 'ken', receiver: 'k@example.com', amountCents: 200, commissionCents: 200, tipCents: 0, senderItemId: '2026-11-01-ken', outcome: 'unknown' },
+      ],
+      skipped: [],
+      createdAt: NOW.toISOString(),
+      updatedAt: NOW.toISOString(),
+    });
+    const deps: PayoutDeps = {
+      rest: {
+        request: async <T,>(r: { method: string; path: string }) => {
+          calls.push(`${r.method} ${r.path}`);
+          return batchReply as T;
+        },
+      },
+      bookings: createMemoryBookingStore(),
+      payouts,
+      emails: new Map(),
+      timeZone: 'UTC',
+    };
+    return { deps, calls };
+  }
+
+  it('re-reads the batch from PayPal and stores the item outcome', async () => {
+    const { deps, calls } = payoutDeps({
+      batch_header: { payout_batch_id: 'BATCH-1', batch_status: 'SUCCESS' },
+      items: [{ payout_item_id: 'I-1', transaction_status: 'SUCCESS', payout_item: { sender_item_id: '2026-11-01-ken' } }],
+    });
+    const paypal = { ...stubPayPal(), payouts: () => deps };
+    const outcome = await handleWebhookEvent(
+      paypal,
+      createMemoryBookingStore(),
+      event('PAYMENT.PAYOUTS-ITEM.SUCCEEDED', { payout_item_id: 'I-1', payout_batch_id: 'BATCH-1', transaction_status: 'FAILED' }),
+      NOW,
+    );
+    expect(outcome).toMatchObject({ result: 'updated' });
+    expect(calls).toEqual(['GET /v1/payments/payouts/BATCH-1?page=1&page_size=100&total_required=true']);
+    expect(deps.payouts.get('2026-11-01')).toMatchObject({ batchStatus: 'SUCCESS', items: [{ outcome: 'paid' }] });
+  });
+
+  it('ignores payout events for batches that are not ours', async () => {
+    const { deps, calls } = payoutDeps({});
+    const paypal = { ...stubPayPal(), payouts: () => deps };
+    expect(
+      await handleWebhookEvent(paypal, createMemoryBookingStore(), event('PAYMENT.PAYOUTSBATCH.SUCCESS', { batch_header: { payout_batch_id: 'OTHER' } }), NOW),
+    ).toMatchObject({ result: 'ignored' });
+    expect(calls).toHaveLength(0);
+  });
+});
+
 describe('PAYMENT.CAPTURE.REFUNDED', () => {
+  it('R1(b): a refund that completes later records when, so payouts count it on that day', async () => {
+    const store = createMemoryBookingStore();
+    const b = booking(store, 'partially_refunded', {
+      capture: recordedCapture(),
+      refunds: [{ refundId: 'REF-1', amountCents: 300, status: 'PENDING', refundedAt: '2026-10-30T12:00:00.000Z' }],
+    });
+    const paypal = stubPayPal(...twice(refund(b.id, 'COMPLETED', '3.00', `${b.id}-refund-1-1`)));
+    await handleWebhookEvent(paypal, store, event('PAYMENT.CAPTURE.REFUNDED', { id: 'REF-1' }), NOW);
+    expect(store.get(b.id)!.hold!.refunds![0]).toMatchObject({ status: 'COMPLETED', settledAt: NOW.toISOString() });
+  });
+
   it('updates a known refund\'s status', async () => {
     const store = createMemoryBookingStore();
     const b = booking(store, 'partially_refunded', {

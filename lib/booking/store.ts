@@ -46,6 +46,8 @@ export interface WalletCharge {
   /** PayPal capture status, e.g. COMPLETED or PENDING. */
   status: string;
   chargedAt: string;
+  /** When a PENDING charge later completed (webhook); payouts count it on that day. */
+  settledAt?: string;
 }
 
 /**
@@ -68,6 +70,8 @@ export interface DepositCapture {
   /** "external": captured outside SlotKeeper (e.g. the PayPal dashboard), learned from a webhook. */
   reason: 'completed' | 'no_show' | 'external';
   capturedAt: string;
+  /** When a PENDING capture later completed (webhook); payouts count it on that day. */
+  settledAt?: string;
 }
 
 export interface DepositRefund {
@@ -76,6 +80,8 @@ export interface DepositRefund {
   /** PayPal refund status, e.g. COMPLETED or PENDING. */
   status: string;
   refundedAt: string;
+  /** When a PENDING refund later completed (webhook); payouts count it on that day. */
+  settledAt?: string;
 }
 
 export interface DepositHold {
@@ -121,11 +127,20 @@ export interface Booking {
   status: BookingStatus;
   hold?: DepositHold;
   createdAt: string;
+  /** Who does the appointment; their commission is paid out at the end of the day. */
+  staffId?: string;
+  /**
+   * Tip for the staff member, paid out with their commission. Nothing sets it yet: the invoice step
+   * must only set it once the tip money was actually received (F-005), or payouts would pay it unpaid.
+   */
+  tipCents?: number;
 }
 
 export interface BookingStore {
   get(id: string): Booking | undefined;
   save(booking: Booking): void;
+  /** Every booking (copies). The Postgres store will filter by date in SQL instead. */
+  list(): Booking[];
 }
 
 /**
@@ -142,6 +157,7 @@ export function createMemoryBookingStore(): BookingStore {
     save: (booking) => {
       bookings.set(booking.id, structuredClone(booking));
     },
+    list: () => [...bookings.values()].map((booking) => structuredClone(booking)),
   };
 }
 
@@ -152,6 +168,7 @@ const globalStore = globalThis as typeof globalThis & { __slotkeeperBookings?: B
 export function withChangeEvents(store: BookingStore): BookingStore {
   return {
     get: (id) => store.get(id),
+    list: () => store.list(),
     save: (booking) => {
       store.save(booking);
       publishBookingChange(structuredClone(booking));

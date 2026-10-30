@@ -1,6 +1,7 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { findService } from './catalog';
+import { defaultStaffFor } from './staff';
 import type { Booking, BookingStore } from './store';
 
 /**
@@ -56,6 +57,7 @@ export function createBooking(
     deposit: { ...service.deposit },
     status: 'awaiting_deposit',
     createdAt: now.toISOString(),
+    staffId: defaultStaffFor(service.id)?.id,
   };
   store.save(booking);
   return booking;

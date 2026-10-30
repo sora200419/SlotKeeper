@@ -13,6 +13,7 @@ import type { Booking, BookingStatus, BookingStore, DepositHold } from '@/lib/bo
 import { parseCents, refundedCents } from './deposit-actions';
 import { authorizeDepositReporting, DepositError, type DepositOrders } from './deposits';
 import { describePayPalError, describeTransportError, isNetworkError, sanitizeError } from './errors';
+import { PayoutError, refreshPayouts, type PayoutDeps } from './payouts';
 import { WebhookRetryableError } from './webhook-signature';
 
 /** The body was signed by PayPal but isn't a webhook event we can read. Answer 400. */
@@ -39,6 +40,8 @@ export interface WebhookOutcome {
 export interface WebhookPayPal {
   orders: DepositOrders;
   payments: Pick<PaymentsController, 'getAuthorizedPayment' | 'getCapturedPayment' | 'getRefund'>;
+  /** Built only for payout events (reading payout settings can fail on its own). */
+  payouts?: () => PayoutDeps;
 }
 
 export function parseWebhookEvent(rawBody: Buffer): WebhookEvent {
@@ -80,6 +83,10 @@ export async function handleWebhookEvent(
   event: WebhookEvent,
   now: Date = new Date(),
 ): Promise<WebhookOutcome> {
+  if (event.eventType.startsWith('PAYMENT.PAYOUTSBATCH.') || event.eventType.startsWith('PAYMENT.PAYOUTS-ITEM.')) {
+    return onPayout(paypal, event.resource, now);
+  }
+
   const resourceId = typeof event.resource.id === 'string' ? event.resource.id : undefined;
   if (!resourceId) return { result: 'ignored', reason: 'event has no resource id' };
 
@@ -164,6 +171,30 @@ async function withFreshRead<T extends { id?: string; customId?: string }>(
 }
 
 /**
+ * A payout batch or item changed. The event only says which batch; the batch is read back from
+ * PayPal (refreshPayouts) and that is what gets stored.
+ */
+async function onPayout(paypal: WebhookPayPal, resource: Record<string, unknown>, now: Date): Promise<WebhookOutcome> {
+  const header = resource.batch_header as { payout_batch_id?: unknown } | undefined;
+  const batchId = typeof header?.payout_batch_id === 'string'
+    ? header.payout_batch_id
+    : typeof resource.payout_batch_id === 'string'
+      ? resource.payout_batch_id
+      : undefined;
+  if (!batchId || !paypal.payouts) return { result: 'ignored', reason: 'payout event without a batch id' };
+  const deps = paypal.payouts();
+  const record = deps.payouts.findByPayoutBatchId(batchId);
+  if (!record) return { result: 'ignored', reason: 'payout batch is not one of ours' };
+  try {
+    await refreshPayouts(deps, record.day, now);
+  } catch (err) {
+    if (err instanceof PayoutError && err.httpStatus >= 500) throw new WebhookRetryableError(err.message);
+    throw err;
+  }
+  return { result: 'updated', reason: `payouts ${record.day}` };
+}
+
+/**
  * The customer approved in PayPal. Normally the browser authorizes right away; if they closed the
  * tab first, this completes the hold. Both paths share the booking lock, so the loser just stops.
  */
@@ -192,6 +223,14 @@ async function onOrderApproved(
     // A definite answer (already held, declined, not approved...): the booking already shows it.
     return { result: 'unchanged', bookingId: booking.id, reason: err.code };
   }
+}
+
+/**
+ * Money recorded as PENDING that PayPal now reports COMPLETED: note when, so end-of-day payouts count
+ * it on the day it completed instead of the (possibly already paid out) day it was first recorded.
+ */
+function settledNow(previous: string, next: string | undefined, now: Date): { settledAt?: string } {
+  return next === 'COMPLETED' && previous !== 'COMPLETED' ? { settledAt: now.toISOString() } : {};
 }
 
 function save(store: BookingStore, booking: Booking, status: BookingStatus, hold: Partial<DepositHold>): WebhookOutcome {
@@ -277,7 +316,7 @@ function applyCapture(
   const recorded = hold.capture;
   if (recorded && recorded.captureId === capture.id) {
     if (recorded.status === capture.status) return { result: 'unchanged', bookingId };
-    const record = { ...recorded, status: capture.status ?? recorded.status };
+    const record = { ...recorded, status: capture.status ?? recorded.status, ...settledNow(recorded.status, capture.status, now) };
     if (failed) {
       console.error('[webhook] capture declined after being recorded; needs review', { bookingId });
       return save(store, booking, 'deposit_needs_review', { capture: record });
@@ -345,7 +384,11 @@ function applyWalletCapture(
   const known = charges.findIndex((c) => c.captureId === capture.id);
   if (known >= 0) {
     if (charges[known].status === capture.status) return { result: 'unchanged', bookingId };
-    charges[known] = { ...charges[known], status: capture.status ?? charges[known].status };
+    charges[known] = {
+      ...charges[known],
+      status: capture.status ?? charges[known].status,
+      ...settledNow(charges[known].status, capture.status, now),
+    };
     if (failed) console.error('[webhook] wallet charge declined after being recorded; needs review', { bookingId });
     return save(store, booking, failed ? 'deposit_needs_review' : booking.status, { walletCharges: charges });
   }
@@ -400,7 +443,7 @@ function applyRefund(
 
   if (known >= 0) {
     if (refunds[known].status === status) return { result: 'unchanged', bookingId };
-    refunds[known] = { ...refunds[known], status };
+    refunds[known] = { ...refunds[known], status, ...settledNow(refunds[known].status, status, now) };
   } else if (cents === undefined) {
     throw new WebhookRetryableError('Refund amount could not be read.');
   } else {

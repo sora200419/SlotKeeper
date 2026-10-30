@@ -60,12 +60,13 @@ describe('readPayPalSettings', () => {
     );
   });
 
-  it('rejects a zero, negative or non-numeric timeout', () => {
-    for (const value of ['0', '-5', 'abc', '1.5']) {
+  it('rejects a zero, negative, non-numeric or over-60-second timeout', () => {
+    for (const value of ['0', '-5', 'abc', '1.5', '60001']) {
       expect(() => readPayPalSettings({ ...base, PAYPAL_TIMEOUT_MS: value })).toThrow(
         /PAYPAL_TIMEOUT_MS/,
       );
     }
     expect(readPayPalSettings({ ...base, PAYPAL_TIMEOUT_MS: '8000' }).timeoutMs).toBe(8000);
+    expect(readPayPalSettings({ ...base, PAYPAL_TIMEOUT_MS: '60000' }).timeoutMs).toBe(60000);
   });
 });

@@ -6,6 +6,7 @@ import type { Booking } from '@/lib/booking/store';
 import { PayPalConfigError } from '@/lib/paypal/config';
 import { DepositError } from '@/lib/paypal/deposits';
 import { sanitizeError } from '@/lib/paypal/errors';
+import { PayoutError } from '@/lib/paypal/payouts';
 import { StaffAuthError } from './staff';
 
 /**
@@ -21,6 +22,12 @@ export function errorResponse(err: unknown): NextResponse {
         paypalIssue: err.paypal?.issue,
         paypalDebugId: err.paypal?.debugId,
       },
+      { status: err.httpStatus },
+    );
+  }
+  if (err instanceof PayoutError) {
+    return NextResponse.json(
+      { error: err.code, message: err.message, paypalIssue: err.paypal?.issue ?? err.paypal?.name, paypalDebugId: err.paypal?.debugId },
       { status: err.httpStatus },
     );
   }
