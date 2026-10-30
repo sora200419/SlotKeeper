@@ -3,6 +3,7 @@ import {
   Environment,
   OrdersController,
   PaymentsController,
+  TransactionSearchController,
   VaultController,
 } from '@paypal/paypal-server-sdk';
 
@@ -58,6 +59,7 @@ export function stubPayPal(...replies: Reply[]) {
     orders: new OrdersController(client),
     payments: new PaymentsController(client),
     vault: new VaultController(client),
+    transactionSearch: new TransactionSearchController(client),
     requests,
     remaining: () => queue.length,
   };

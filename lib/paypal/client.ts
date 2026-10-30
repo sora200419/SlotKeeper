@@ -5,6 +5,7 @@ import {
   OrdersController,
   type OAuthToken,
   PaymentsController,
+  TransactionSearchController,
   VaultController,
   type Configuration,
 } from '@paypal/paypal-server-sdk';
@@ -95,6 +96,10 @@ export function getOrdersController(): OrdersController {
 
 export function getPaymentsController(): PaymentsController {
   return new PaymentsController(getPayPalClient());
+}
+
+export function getTransactionSearchController(): TransactionSearchController {
+  return new TransactionSearchController(getPayPalClient());
 }
 
 export function getVaultController(): VaultController {
