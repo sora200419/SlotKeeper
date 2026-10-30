@@ -26,6 +26,7 @@ import { DepositError } from './deposits';
 import {
   describePayPalError,
   describeTransportError,
+  isDefiniteRefusal,
   isNetworkError,
   sanitizeError,
   type PayPalFailure,
@@ -61,6 +62,20 @@ const DECLINE_ISSUES = new Set([
   'AUTHORIZATION_DENIED',
   'REFUND_FAILED_INSUFFICIENT_FUNDS',
 ]);
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/**
+ * How long a replay may reuse a PayPal-Request-Id. PayPal forgets ids after 6 hours on Orders and 45
+ * days on Payments (SDK docs); a later replay would run as a brand-new call, so it stops short of that.
+ */
+const REPLAY_WINDOW_MS: Record<MoneyActionKind, number> = {
+  capture: 44 * 24 * HOUR_MS,
+  void: 44 * 24 * HOUR_MS,
+  reauthorize: 44 * 24 * HOUR_MS,
+  refund: 44 * 24 * HOUR_MS,
+  wallet_charge: 5 * HOUR_MS,
+};
 
 function loadHeldBooking(store: BookingStore, bookingId: string): HeldBooking {
   const booking = store.get(bookingId);
@@ -141,9 +156,10 @@ interface MoneyAction<T> {
 
 /**
  * Runs one money call with a stable PayPal-Request-Id. Callers hold the booking lock.
- * - Definite 4xx answer: nothing happened; clear any pending action and bump the attempt so the next
- *   try isn't served PayPal's stored failure.
- * - Anything else (5xx, no response, unreadable 2xx): the money may have moved. Record the action as
+ * - Definite refusal (isDefiniteRefusal): nothing happened; clear any pending action and bump the
+ *   attempt so the next try isn't served PayPal's stored failure.
+ * - Anything else (5xx, 408, 409, no response, unreadable 2xx, a replay refused before PayPal's payment
+ *   logic): the money may have moved. Record the action as
  *   pending; until it is replayed with the same id and parameters, no other money call is allowed.
  */
 async function runMoneyAction<T>(
@@ -165,6 +181,15 @@ async function runMoneyAction<T>(
         'pending_action',
         409,
         `A ${pending.kind} is still being confirmed with PayPal. Retry that first.`,
+      );
+    }
+    if (now.getTime() - Date.parse(pending.since) > REPLAY_WINDOW_MS[kind]) {
+      console.error(`[paypal] ${label}: too old to replay safely; needs review`, { bookingId: booking.id, since: pending.since });
+      store.save({ ...booking, status: 'deposit_needs_review' });
+      throw new DepositError(
+        'needs_review',
+        409,
+        `PayPal may have completed this ${kind} and no longer recognises its request id. Check PayPal before doing anything else.`,
       );
     }
     if (params.amountCents !== undefined && params.amountCents !== pending.amountCents) {
@@ -215,7 +240,7 @@ async function runMoneyAction<T>(
       throw sanitizeError(err, `Could not ${label}`);
     }
     const failure = describePayPalError(err);
-    if (failure && failure.status < 500) {
+    if (failure && isDefiniteRefusal(failure, pending !== undefined)) {
       console.error(`[paypal] ${label} failed`, {
         bookingId: booking.id,
         status: failure.status,
@@ -240,9 +265,15 @@ async function runMoneyAction<T>(
       console.error(`[paypal] ${label}: outcome unknown`, {
         bookingId: booking.id,
         status: failure.status,
+        issue: failure.issue,
         debugId: failure.debugId,
       });
-      throw fromActionFailure(failure, label);
+      throw new DepositError(
+        'paypal_error',
+        502,
+        `PayPal has not confirmed the result (HTTP ${failure.status}). Retry to ${label}; it will not happen twice.`,
+        failure,
+      );
     }
     if (isNetworkError(err)) {
       console.error(`[paypal] ${label}: could not reach PayPal, outcome unknown`, {
@@ -705,7 +736,7 @@ async function ensureVaulted(
     tokens = (await paypal.vault.listCustomerPaymentTokens({ customerId: wallet.customerId })).result.paymentTokens;
   } catch (err) {
     const failure = describePayPalError(err);
-    if (failure && failure.status < 500) {
+    if (failure?.status === 404) {
       throw new DepositError('invalid_state', 409, 'PayPal has no saved wallet for this customer yet.', failure);
     }
     if (failure) throw new DepositError('paypal_error', 502, 'PayPal could not list the saved wallet. Please retry.', failure);

@@ -31,7 +31,8 @@ export function buildClientConfiguration(settings: PayPalSettings): Partial<Conf
         // Only idempotent methods. Money-moving POSTs are never re-sent by the SDK; callers retry
         // them explicitly with the same PayPal-Request-Id.
         httpMethodsToRetry: ['GET', 'PUT'],
-        // Worst case for one GET: 2 attempts x timeout + ~1 s backoff (about 31 s at the 15 s default).
+        // Worst case for one GET: 2 attempts x timeout + ~1 s backoff, plus one more timeout if a token
+        // must be fetched first (about 46 s at the 15 s default). The token request is never retried.
         maxNumberOfRetries: 1,
         // The generated default is 0, which disables retrying no matter what maxNumberOfRetries says.
         maximumRetryWaitTime: 10,

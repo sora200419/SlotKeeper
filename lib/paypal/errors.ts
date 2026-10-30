@@ -97,6 +97,21 @@ export interface PayPalFailure {
 }
 
 /**
+ * True only when PayPal's answer proves the call did nothing, so a new PayPal-Request-Id is safe.
+ * 408, 409 and PREVIOUS_REQUEST_IN_PROGRESS can mean the first request is still running: a fresh id
+ * then would act twice, so those stay outcome-unknown and are replayed with the same id.
+ *
+ * On a `replay` of an outcome-unknown call, only a business answer (422) settles it. A 401, 403, 429 or
+ * 400 refuses this replay, possibly before it reached the payment logic (a refused token fetch reads
+ * the same way), and says nothing about what the first send did.
+ */
+export function isDefiniteRefusal(failure: PayPalFailure, replay = false): boolean {
+  if (failure.status >= 500 || failure.status === 408 || failure.status === 409) return false;
+  if (replay && failure.status !== 422) return false;
+  return failure.issue !== 'PREVIOUS_REQUEST_IN_PROGRESS';
+}
+
+/**
  * Reads a PayPal error. Orders/Payments errors arrive as CustomError, whose payload keeps PayPal's
  * wire names (debug_id, details[].issue), not camelCase. Returns undefined for non-API errors.
  */

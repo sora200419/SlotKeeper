@@ -178,6 +178,17 @@ describe('runDailyPayouts', () => {
     expect(calls[1].requestId).toBe('slotkeeper-payouts-2026-11-01-1');
   });
 
+  it.each([408, 409])('a %s may mean the batch is still running: same request id, never "rejected"', async (status) => {
+    const bookings = createMemoryBookingStore();
+    capturedBooking(bookings, 'b1', 'haircut', 1000);
+    const { rest, calls } = fakeRest(rejected(status, 'CONFLICT'), accepted);
+    const d = deps(rest, bookings);
+    await expect(runDailyPayouts(d, DAY, NOW)).rejects.toMatchObject({ code: 'paypal_error', httpStatus: 502 });
+    expect(d.payouts.get(DAY)!.state).toBe('submitting');
+    await runDailyPayouts(d, DAY, NOW);
+    expect(calls[1].requestId).toBe(calls[0].requestId);
+  });
+
   it('a definite rejection pays nothing; the next run recomputes with a new request id', async () => {
     const bookings = createMemoryBookingStore();
     capturedBooking(bookings, 'b1', 'haircut', 1000);

@@ -98,6 +98,8 @@ export interface DepositHold {
   authorizeAttempt?: number;
   /** An authorize call may have succeeded at PayPal but we never saw the response. Replay it before anything else. */
   authorizeOutcomeUnknown?: boolean;
+  /** When the current unknown authorize began; replays stop once PayPal has forgotten its request id. */
+  authorizeUnknownSince?: string;
   authorizationId?: string;
   /** PayPal authorization status, e.g. CREATED or PENDING. */
   authorizationStatus?: string;

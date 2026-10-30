@@ -4,7 +4,7 @@ import { businessDay, dailyEarnings } from '@/lib/booking/earnings';
 import { withBookingLock } from '@/lib/booking/locks';
 import { findStaff } from '@/lib/booking/staff';
 import type { BookingStore } from '@/lib/booking/store';
-import type { PayPalFailure } from './errors';
+import { isDefiniteRefusal, type PayPalFailure } from './errors';
 import { PayPalRestError, PayPalUnreachableError, type RestTransport } from './rest';
 
 export class PayoutError extends Error {
@@ -268,13 +268,15 @@ async function submitLocked(deps: PayoutDeps, record: PayoutBatchRecord, now: Da
       requestId: `${record.senderBatchId}-${record.attempt}`,
     });
   } catch (err) {
-    if (err instanceof PayPalRestError && err.failure.status < 500) {
+    const duplicate =
+      err instanceof PayPalRestError &&
+      /DUPLICATE|already exists/i.test(`${err.failure.name ?? ''} ${err.failure.issue ?? ''} ${err.failure.description ?? ''}`);
+    if (err instanceof PayPalRestError && (duplicate || isDefiniteRefusal(err.failure))) {
       const failure = err.failure;
       console.error('[payouts] batch rejected', { day: record.day, status: failure.status, name: failure.name, issue: failure.issue, debugId: failure.debugId });
       // The batch may exist at PayPal although this answer is a refusal: PayPal says so (duplicate
       // sender_batch_id), or an earlier send of this record had an unknown outcome and PayPal has
       // since forgotten that request id. Either way it may be paid, so staff check it; never retry.
-      const duplicate = /DUPLICATE|already exists/i.test(`${failure.name ?? ''} ${failure.issue ?? ''} ${failure.description ?? ''}`);
       const maybePaid = duplicate || record.outcomeUnknownSince !== undefined;
       deps.payouts.save({ ...record, state: maybePaid ? 'needs_review' : 'rejected', lastError: failure, updatedAt: now.toISOString() });
       throw maybePaid

@@ -20,6 +20,7 @@ import {
   describeTransportError,
   isNetworkError,
   sanitizeError,
+  isDefiniteRefusal,
   type PayPalFailure,
 } from './errors';
 
@@ -60,6 +61,9 @@ export interface ReturnUrls {
 
 /** An order stays approvable for 3 hours; reuse it for a while, then start a fresh one. */
 const ORDER_REUSE_MS = 2 * 60 * 60 * 1000;
+
+/** PayPal forgets Orders request ids after 6 hours (SDK docs); replays stop short of that. */
+const AUTHORIZE_REPLAY_WINDOW_MS = 5 * 60 * 60 * 1000;
 
 /** PayPal issues that mean "this funding source said no"; the order can't be reused. */
 const DECLINE_ISSUES = new Set(['INSTRUMENT_DECLINED', 'PAYER_ACTION_REQUIRED', 'TRANSACTION_REFUSED', 'PAYER_CANNOT_PAY']);
@@ -380,6 +384,19 @@ async function runAuthorize(
 ): Promise<Booking> {
   const hold = booking.hold!;
   const attempt = hold.authorizeAttempt ?? 1;
+  const replaying = hold.authorizeOutcomeUnknown === true;
+  const since = replaying && hold.authorizeUnknownSince ? hold.authorizeUnknownSince : now.toISOString();
+  const markUnknown = () => saveHold(store, booking, { authorizeOutcomeUnknown: true, authorizeUnknownSince: since });
+
+  if (replaying && now.getTime() - Date.parse(since) > AUTHORIZE_REPLAY_WINDOW_MS) {
+    console.error('[paypal] authorize too old to replay; needs review', { bookingId: booking.id, orderId: hold.paypalOrderId, since });
+    store.save({ ...booking, status: 'deposit_needs_review', hold: { ...hold, authorizeOutcomeUnknown: false, orderSpent: true } });
+    throw new DepositError(
+      'needs_review',
+      409,
+      'PayPal never confirmed this deposit hold and no longer recognises the request. Staff need to check it.',
+    );
+  }
 
   let result;
   try {
@@ -411,8 +428,8 @@ async function runAuthorize(
         failure,
       );
     }
-    if (failure && failure.status < 500) {
-      // A definite 4xx answer: nothing was held. The next attempt needs a fresh request id, or PayPal
+    if (failure && isDefiniteRefusal(failure, replaying)) {
+      // A definite refusal: nothing was held. The next attempt needs a fresh request id, or PayPal
       // could replay this failure; a decline also means this order can't be approved again.
       const depositError = fromPayPalFailure(failure, 'authorize the deposit');
       saveHold(store, booking, {
@@ -422,11 +439,19 @@ async function runAuthorize(
       });
       throw depositError;
     }
-    // Anything else (a 5xx, no response, or a 2xx we couldn't read): PayPal may already have held
-    // the funds. Keep the same request id and replay it before anything else (createDepositOrder
+    // Anything else (a 5xx, 408, 409, no response, or a 2xx we couldn't read): PayPal may already have
+    // held the funds. Keep the same request id and replay it before anything else (createDepositOrder
     // does this on the next checkout).
-    saveHold(store, booking, { authorizeOutcomeUnknown: true });
-    if (failure) throw fromPayPalFailure(failure, 'authorize the deposit');
+    markUnknown();
+    if (failure) {
+      console.error('[paypal] authorize outcome unknown', { bookingId: booking.id, status: failure.status, issue: failure.issue, debugId: failure.debugId });
+      throw new DepositError(
+        'paypal_error',
+        502,
+        `PayPal has not confirmed the deposit hold (HTTP ${failure.status}). It will be checked before the next attempt.`,
+        failure,
+      );
+    }
     if (isNetworkError(err)) throw networkError(err, 'authorize the deposit');
     console.error('[paypal] authorize response could not be read; outcome unknown', {
       bookingId: booking.id,
@@ -441,7 +466,7 @@ async function runAuthorize(
 
   const authorization = result?.purchaseUnits?.[0]?.payments?.authorizations?.[0];
   if (!authorization?.id) {
-    saveHold(store, booking, { authorizeOutcomeUnknown: true });
+    markUnknown();
     throw new DepositError('paypal_error', 502, 'PayPal did not return an authorization.');
   }
 

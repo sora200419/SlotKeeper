@@ -1,7 +1,7 @@
 import 'server-only';
 import { describeTransportError, isNetworkError, type PayPalFailure } from './errors';
 
-/** PayPal answered with an error status. Its outcome is known (for 4xx: nothing happened). */
+/** PayPal answered with an error status. Use isDefiniteRefusal to tell whether nothing happened. */
 export class PayPalRestError extends Error {
   constructor(readonly failure: PayPalFailure) {
     super(`PayPal answered HTTP ${failure.status}${failure.issue ? ` (${failure.issue})` : failure.name ? ` (${failure.name})` : ''}.`);
@@ -17,14 +17,22 @@ export class PayPalUnreachableError extends Error {
   }
 }
 
-export interface RestRequest {
-  method: 'GET' | 'POST';
-  /** Path with query string, e.g. /v1/payments/payouts. */
-  path: string;
-  body?: unknown;
-  /** PayPal-Request-Id: the same id replays PayPal's stored result instead of acting twice. */
-  requestId?: string;
-}
+/** A POST must carry a request id: the transport repeats it after a 401, and only the id makes that safe. */
+export type RestRequest =
+  | {
+      method: 'GET';
+      /** Path with query string, e.g. /v1/payments/payouts. */
+      path: string;
+      body?: undefined;
+      requestId?: undefined;
+    }
+  | {
+      method: 'POST';
+      path: string;
+      body?: unknown;
+      /** PayPal-Request-Id: the same id replays PayPal's stored result instead of acting twice. */
+      requestId: string;
+    };
 
 export interface RestTransport {
   request<T>(request: RestRequest): Promise<T>;

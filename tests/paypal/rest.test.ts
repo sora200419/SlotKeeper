@@ -46,7 +46,7 @@ describe('createRestTransport', () => {
       json(422, { name: 'UNPROCESSABLE_ENTITY', message: 'nope', debug_id: 'dbg-1', details: [{ issue: 'INSUFFICIENT_FUNDS' }] }),
     );
     const err = (await rest
-      .request({ method: 'POST', path: '/v1/payments/payouts', body: {} })
+      .request({ method: 'POST', path: '/v1/payments/payouts', body: {}, requestId: 'r-1' })
       .then(() => undefined, (e: unknown) => e)) as PayPalRestError;
     expect(err).toBeInstanceOf(PayPalRestError);
     expect(err.failure).toEqual({ status: 422, name: 'UNPROCESSABLE_ENTITY', issue: 'INSUFFICIENT_FUNDS', description: 'nope', debugId: 'dbg-1' });
