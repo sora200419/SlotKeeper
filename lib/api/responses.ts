@@ -7,6 +7,8 @@ import { PayPalConfigError } from '@/lib/paypal/config';
 import { DepositError } from '@/lib/paypal/deposits';
 import { sanitizeError } from '@/lib/paypal/errors';
 import { PayoutError } from '@/lib/paypal/payouts';
+import { CopilotError } from '@/lib/copilot/copilot';
+import { PlanError } from '@/lib/copilot/execute';
 import { StaffAuthError } from './staff';
 
 /**
@@ -24,6 +26,9 @@ export function errorResponse(err: unknown): NextResponse {
       },
       { status: err.httpStatus },
     );
+  }
+  if (err instanceof CopilotError || err instanceof PlanError) {
+    return NextResponse.json({ error: err.code, message: err.message }, { status: err.httpStatus });
   }
   if (err instanceof PayoutError) {
     return NextResponse.json(

@@ -1,7 +1,8 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { findService } from './catalog';
-import { defaultStaffFor } from './staff';
+import { withBookingLock } from './locks';
+import { defaultStaffFor, findStaff } from './staff';
 import type { Booking, BookingStore } from './store';
 
 /**
@@ -61,4 +62,64 @@ export function createBooking(
   };
   store.save(booking);
   return booking;
+}
+
+/** Bookings that already happened or were closed can't be moved. */
+const MOVABLE = new Set(['awaiting_deposit', 'deposit_held', 'deposit_pending', 'deposit_needs_review']);
+
+const HONOR_PERIOD_MS = MAX_DAYS_AHEAD * 24 * 60 * 60 * 1000;
+
+/**
+ * Why a booking can't be moved to `startsAt`, or undefined if it can. Shared by moveBooking and the
+ * copilot's plan check, so a bad move is caught while the plan is made, not after approval.
+ * A held deposit is reliably capturable for 3 days from when it was authorized (PayPal's honor
+ * period; reauthorize to renew it), so a held booking can't move past that or past the hold's expiry.
+ */
+export function moveTimeProblem(booking: Booking, startsAt: string, now: Date): string | undefined {
+  const ms = Date.parse(startsAt);
+  if (Number.isNaN(ms)) return 'startsAt must be an ISO 8601 date-time.';
+  if (ms <= now.getTime()) return 'startsAt must be in the future.';
+  if (ms > now.getTime() + HONOR_PERIOD_MS) return `Deposit-backed bookings can be at most ${MAX_DAYS_AHEAD} days ahead.`;
+  const hold = booking.hold;
+  if (hold?.heldAt && ms > Date.parse(hold.heldAt) + HONOR_PERIOD_MS) {
+    return 'That time is more than 3 days after the deposit was authorized, when PayPal may no longer capture it. Keep the booking within that window, or move it later once the hold has been reauthorized.';
+  }
+  if (hold?.expiresAt && ms > Date.parse(hold.expiresAt)) {
+    return 'That time is after the PayPal hold expires; the deposit could not be captured.';
+  }
+  return undefined;
+}
+
+/**
+ * Moves a booking to another staff member and/or time (owner copilot step; no money moves). Time
+ * rules are in moveTimeProblem.
+ */
+export function moveBooking(
+  store: BookingStore,
+  bookingId: string,
+  change: { staffId?: string; startsAt?: string },
+  now: Date = new Date(),
+): Promise<Booking> {
+  return withBookingLock(bookingId, async () => {
+    const booking = store.get(bookingId);
+    if (!booking) throw new BookingInputError(`Booking ${bookingId} not found.`);
+    if (!MOVABLE.has(booking.status)) {
+      throw new BookingInputError(`Booking ${bookingId} is "${booking.status}" and can't be moved.`);
+    }
+    if (change.staffId === undefined && change.startsAt === undefined) {
+      throw new BookingInputError('Nothing to change: give staffId and/or startsAt.');
+    }
+    if (change.staffId !== undefined && !findStaff(change.staffId)) {
+      throw new BookingInputError(`Unknown staff member "${change.staffId}".`);
+    }
+    let startsAt = booking.startsAt;
+    if (change.startsAt !== undefined) {
+      const problem = moveTimeProblem(booking, change.startsAt, now);
+      if (problem) throw new BookingInputError(problem);
+      startsAt = new Date(Date.parse(change.startsAt)).toISOString();
+    }
+    const moved: Booking = { ...booking, startsAt, staffId: change.staffId ?? booking.staffId };
+    store.save(moved);
+    return moved;
+  });
 }
