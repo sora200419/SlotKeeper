@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { readLimitedBody } from '@/lib/api/body';
 import { errorResponse } from '@/lib/api/responses';
 import { getBookingStore } from '@/lib/booking/store';
 import { getOrdersController, getPaymentsController } from '@/lib/paypal/client';
@@ -18,31 +19,9 @@ import {
 
 export const runtime = 'nodejs';
 
+// The raw bytes are read with a limit (signatures cover the exact bytes; the route is public and
+// runs before the signature check).
 const MAX_BODY_BYTES = 256 * 1024;
-
-/**
- * Reads the body as raw bytes (signatures cover the exact bytes) but stops at `limit`: this route
- * is public and runs before the signature check, so it must not buffer whatever it is sent.
- */
-async function readLimitedBody(request: Request, limit: number): Promise<Buffer | undefined> {
-  const declared = Number(request.headers.get('content-length'));
-  if (Number.isFinite(declared) && declared > limit) return undefined;
-  if (!request.body) return Buffer.alloc(0);
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > limit) {
-      await reader.cancel();
-      return undefined;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks);
-}
 
 /**
  * PayPal webhook receiver. Any non-2xx makes PayPal redeliver (up to 25 times over 3 days), so:

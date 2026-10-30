@@ -12,6 +12,7 @@ import {
   type OrdersController,
 } from '@paypal/paypal-server-sdk';
 import { findService, formatAmount } from '@/lib/booking/catalog';
+import { slotConflict } from '@/lib/booking/availability';
 import { withBookingLock } from '@/lib/booking/locks';
 import type { Booking, BookingStore, DepositHold } from '@/lib/booking/store';
 import {
@@ -33,6 +34,7 @@ export type DepositErrorCode =
   | 'invalid_amount'
   | 'authorization_expired'
   | 'pending_action'
+  | 'slot_taken'
   | 'paypal_error'
   | 'network_error';
 
@@ -200,7 +202,7 @@ export function createDepositOrder(
   urls: ReturnUrls,
   now: Date = new Date(),
   options: CheckoutOptions = {},
-): Promise<{ orderId: string }> {
+): Promise<{ orderId: string; approveUrl?: string }> {
   return withBookingLock(
     bookingId,
     () => createDepositOrderLocked(orders, store, bookingId, urls, now, options),
@@ -215,7 +217,7 @@ async function createDepositOrderLocked(
   urls: ReturnUrls,
   now: Date,
   options: CheckoutOptions,
-): Promise<{ orderId: string }> {
+): Promise<{ orderId: string; approveUrl?: string }> {
   const savePayment = options.savePayment === true;
   let booking = loadBooking(store, bookingId);
   if (booking.status !== 'awaiting_deposit') {
@@ -247,13 +249,14 @@ async function createDepositOrderLocked(
     (existing.savePayment ?? false) === savePayment &&
     now.getTime() - Date.parse(existing.orderCreatedAt) < ORDER_REUSE_MS
   ) {
-    return { orderId: existing.paypalOrderId };
+    return { orderId: existing.paypalOrderId, approveUrl: existing.approveUrl };
   }
 
   const attempt = (existing?.orderAttempt ?? 0) + 1;
   // Built outside the try: a local problem (e.g. unknown service) must not be mistaken for a PayPal failure.
   const body = buildDepositOrderRequest(booking, urls, { savePayment });
   let orderId: string | undefined;
+  let approveUrl: string | undefined;
   try {
     const response = await orders.createOrder({
       body,
@@ -261,6 +264,8 @@ async function createDepositOrderLocked(
       prefer: 'return=minimal',
     });
     orderId = response.result?.id;
+    // Where the customer approves when not using our page's PayPal button (e.g. booked by an AI assistant).
+    approveUrl = response.result?.links?.find((link) => link.rel === 'payer-action' || link.rel === 'approve')?.href;
   } catch (err) {
     const failure = describePayPalError(err);
     if (failure) throw fromPayPalFailure(failure, 'create the deposit order');
@@ -278,9 +283,10 @@ async function createDepositOrderLocked(
       orderAttempt: attempt,
       orderCreatedAt: now.toISOString(),
       ...(savePayment ? { savePayment: true } : {}),
+      ...(approveUrl ? { approveUrl } : {}),
     },
   });
-  return { orderId };
+  return { orderId, approveUrl };
 }
 
 /**
@@ -328,6 +334,11 @@ async function authorizeDepositLocked(
   if (booking.status !== 'awaiting_deposit' && booking.hold.authorizationId) {
     return { booking, alreadyHeld: true };
   }
+  // Only a booking still waiting for its deposit may get one (or a retry of an unknown outcome).
+  // A cancelled booking keeps its PayPal order, so its old checkout tab must not hold money.
+  if (booking.status !== 'awaiting_deposit' && !booking.hold.authorizeOutcomeUnknown) {
+    throw new DepositError('invalid_state', 409, `This booking is "${booking.status}"; no deposit can be placed.`);
+  }
   if (booking.hold.orderSpent) {
     throw new DepositError(
       'invalid_state',
@@ -335,7 +346,30 @@ async function authorizeDepositLocked(
       'This PayPal order can no longer be used. Please start checkout again.',
     );
   }
-  return { booking: await runAuthorize(orders, store, booking, now), alreadyHeld: false };
+  // One paid deposit per staff member and time: re-check the slot and authorize under the slots lock
+  // (lock order: booking, then slots), so a customer who approves an old link after their unpaid hold
+  // lapsed and the slot went to someone else is refused. Approval alone holds no money.
+  return withBookingLock(
+    'slots',
+    async () => {
+      if (booking.status === 'awaiting_deposit' && !booking.hold!.authorizeOutcomeUnknown) {
+        const conflict = slotConflict(store.list(), booking, now);
+        if (conflict) {
+          console.error('[paypal] slot taken before the deposit was authorized', {
+            bookingId: booking.id,
+            takenBy: conflict.id,
+          });
+          throw new DepositError(
+            'slot_taken',
+            409,
+            'This time was given to another customer while the deposit waited. Nothing was charged; please book another time.',
+          );
+        }
+      }
+      return { booking: await runAuthorize(orders, store, booking, now), alreadyHeld: false };
+    },
+    'wait',
+  );
 }
 
 async function runAuthorize(

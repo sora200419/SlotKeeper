@@ -114,6 +114,8 @@ export interface DepositHold {
   actionAttempts?: Partial<Record<MoneyActionKind, number>>;
   /** The order was created asking PayPal to save the wallet (the customer opted in). */
   savePayment?: boolean;
+  /** PayPal's payer-action link for this order, for customers who approve outside our page (MCP). */
+  approveUrl?: string;
   savedWallet?: SavedWallet;
   walletCharges?: WalletCharge[];
 }
@@ -129,6 +131,15 @@ export interface Booking {
   createdAt: string;
   /** Who does the appointment; their commission is paid out at the end of the day. */
   staffId?: string;
+  /** "agent": booked by a customer's AI assistant through the MCP server. */
+  source?: 'web' | 'agent';
+  /** When an unpaid booking last claimed its slot (defaults to createdAt); the claim lasts 30 minutes. */
+  slotHeldAt?: string;
+  /**
+   * SHA-256 of the booking token handed to the customer's assistant once (hold_slot). Later MCP
+   * calls for this booking must present the token; the token itself is never stored.
+   */
+  accessTokenHash?: string;
   /**
    * Tip for the staff member, paid out with their commission. Nothing sets it yet: the invoice step
    * must only set it once the tip money was actually received (F-005), or payouts would pay it unpaid.

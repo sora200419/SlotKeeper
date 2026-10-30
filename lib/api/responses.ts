@@ -64,11 +64,13 @@ export function errorResponse(err: unknown): NextResponse {
  * is kept. Staff routes and the staff SSE feed return the full booking.
  */
 export function publicBooking(booking: Booking): Booking {
-  const wallet = booking.hold?.savedWallet;
-  if (!wallet) return booking;
+  // The booking token's hash is a credential check value; it never leaves the server.
+  const { accessTokenHash: _hash, ...rest } = booking;
+  const wallet = rest.hold?.savedWallet;
+  if (!wallet) return rest;
   return {
-    ...booking,
-    hold: { ...booking.hold!, savedWallet: { status: wallet.status, savedAt: wallet.savedAt } },
+    ...rest,
+    hold: { ...rest.hold!, savedWallet: { status: wallet.status, savedAt: wallet.savedAt } },
   };
 }
 
