@@ -37,6 +37,10 @@ export function createBooking(
   if (customerName.length === 0 || customerName.length > 80) {
     throw new BookingInputError('customerName must be 1-80 characters.');
   }
+  // Control characters and half a surrogate pair are never a name, and Postgres can't store them.
+  if (/[\u0000-\u001f\u007f]|[\uD800-\uDFFF]/u.test(customerName)) {
+    throw new BookingInputError('customerName contains characters that are not allowed.');
+  }
 
   if (typeof input.startsAt !== 'string') throw new BookingInputError('startsAt is required.');
   const startsAtMs = Date.parse(input.startsAt);

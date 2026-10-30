@@ -1,4 +1,5 @@
 import 'server-only';
+import { loadedRecords, persist } from '@/lib/storage/records';
 import type { Money } from './catalog';
 import { publishBookingChange } from './events';
 
@@ -152,14 +153,11 @@ export interface Booking {
 export interface BookingStore {
   get(id: string): Booking | undefined;
   save(booking: Booking): void;
-  /** Every booking (copies). The Postgres store will filter by date in SQL instead. */
+  /** Every booking (copies). */
   list(): Booking[];
 }
 
-/**
- * In-memory store. Temporary: data is lost on restart and isn't shared between server instances.
- * The Postgres store from PLAN.md replaces it behind the same interface.
- */
+/** In-memory store. getBookingStore adds Postgres behind it (lib/storage/records.ts). */
 export function createMemoryBookingStore(): BookingStore {
   const bookings = new Map<string, Booking>();
   return {
@@ -189,7 +187,20 @@ export function withChangeEvents(store: BookingStore): BookingStore {
   };
 }
 
+/** Wraps a store so every save also goes to Postgres, and seeds it with what was saved before. */
+export function withPersistence(store: BookingStore): BookingStore {
+  for (const booking of loadedRecords<Booking>('booking')) store.save(booking);
+  return {
+    get: (id) => store.get(id),
+    list: () => store.list(),
+    save: (booking) => {
+      store.save(booking);
+      persist('booking', booking.id, booking);
+    },
+  };
+}
+
 export function getBookingStore(): BookingStore {
-  globalStore.__slotkeeperBookings ??= withChangeEvents(createMemoryBookingStore());
+  globalStore.__slotkeeperBookings ??= withChangeEvents(withPersistence(createMemoryBookingStore()));
   return globalStore.__slotkeeperBookings;
 }

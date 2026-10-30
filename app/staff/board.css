@@ -1,0 +1,501 @@
+:root {
+  --sk-ink: #1c2430;
+  --sk-muted: #5d6877;
+  --sk-line: #dfe3e8;
+  --sk-paper: #ffffff;
+  --sk-wash: #f4f5f7;
+  --sk-accent: #0b5cad;
+  --sk-danger: #b3261e;
+
+  /* Deposit states: fill and text pairs that stay readable on each other. */
+  --sk-due-bg: #fdf0cf;
+  --sk-due-fg: #6b4a00;
+  --sk-held-bg: #d9e8fb;
+  --sk-held-fg: #0b4a8a;
+  --sk-captured-bg: #d5f0dd;
+  --sk-captured-fg: #145c30;
+  --sk-noshow-bg: #fde0cc;
+  --sk-noshow-fg: #8a3a07;
+  --sk-refunded-bg: #e8e0f8;
+  --sk-refunded-fg: #4c2e8f;
+  --sk-review-bg: #fbdad7;
+  --sk-review-fg: #8c1d18;
+  --sk-released-bg: #e9ebee;
+  --sk-released-fg: #5d6877;
+}
+
+.sk-board {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sk-wash);
+  color: var(--sk-ink);
+}
+
+.sk-board button,
+.sk-gate button {
+  font: inherit;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--sk-line);
+  border-radius: 6px;
+  background: var(--sk-paper);
+  color: var(--sk-ink);
+  cursor: pointer;
+}
+
+.sk-board button:disabled,
+.sk-gate button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.sk-board button.sk-primary,
+.sk-gate button.sk-primary {
+  background: var(--sk-accent);
+  border-color: var(--sk-accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.sk-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.25rem;
+  padding: 0.6rem 1rem;
+  background: var(--sk-paper);
+  border-bottom: 1px solid var(--sk-line);
+}
+
+.sk-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1.05rem;
+}
+
+.sk-live {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--sk-muted);
+}
+
+.sk-live::before {
+  content: '';
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.3rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.sk-live-live {
+  color: #17803d;
+}
+
+.sk-live-reconnecting {
+  color: var(--sk-danger);
+}
+
+.sk-days {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.sk-days input {
+  font: inherit;
+  padding: 0.33rem 0.4rem;
+  border: 1px solid var(--sk-line);
+  border-radius: 6px;
+}
+
+.sk-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-key {
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.sk-key.sk-money-due { background: var(--sk-due-bg); color: var(--sk-due-fg); }
+.sk-key.sk-money-held { background: var(--sk-held-bg); color: var(--sk-held-fg); }
+.sk-key.sk-money-captured { background: var(--sk-captured-bg); color: var(--sk-captured-fg); }
+.sk-key.sk-money-noshow { background: var(--sk-noshow-bg); color: var(--sk-noshow-fg); }
+.sk-key.sk-money-refunded { background: var(--sk-refunded-bg); color: var(--sk-refunded-fg); }
+.sk-key.sk-money-review { background: var(--sk-review-bg); color: var(--sk-review-fg); }
+.sk-key.sk-money-released { background: var(--sk-released-bg); color: var(--sk-released-fg); }
+
+.sk-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.sk-schedule {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem;
+}
+
+.sk-scheduler {
+  flex: 1;
+  min-height: 0;
+  background: var(--sk-paper);
+  border: 1px solid var(--sk-line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.sk-zone {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--sk-muted);
+}
+
+/* Bryntum event bars. The state class lands on the event element via the renderer's cls. */
+.sk-scheduler .b-sch-event {
+  border-radius: 6px;
+  border-left: 4px solid currentColor;
+  padding: 0;
+  align-items: flex-start;
+  overflow: hidden;
+  container-type: inline-size;
+}
+
+.sk-scheduler .b-sch-event-content {
+  align-self: flex-start;
+  width: 100%;
+  margin: 0;
+}
+
+/* A short appointment on a small screen: the name and any plan note matter most. */
+@container (max-width: 72px) {
+  .sk-event-meta {
+    display: none;
+  }
+
+  .sk-event-title,
+  .sk-event-plan {
+    font-size: 0.68rem;
+  }
+}
+
+.sk-scheduler .sk-money-due { --b-event-background: var(--sk-due-bg); background: var(--sk-due-bg); color: var(--sk-due-fg); }
+.sk-scheduler .sk-money-held { --b-event-background: var(--sk-held-bg); background: var(--sk-held-bg); color: var(--sk-held-fg); }
+.sk-scheduler .sk-money-captured { --b-event-background: var(--sk-captured-bg); background: var(--sk-captured-bg); color: var(--sk-captured-fg); }
+.sk-scheduler .sk-money-noshow { --b-event-background: var(--sk-noshow-bg); background: var(--sk-noshow-bg); color: var(--sk-noshow-fg); }
+.sk-scheduler .sk-money-refunded { --b-event-background: var(--sk-refunded-bg); background: var(--sk-refunded-bg); color: var(--sk-refunded-fg); }
+.sk-scheduler .sk-money-review { --b-event-background: var(--sk-review-bg); background: var(--sk-review-bg); color: var(--sk-review-fg); }
+.sk-scheduler .sk-money-released { --b-event-background: var(--sk-released-bg); background: var(--sk-released-bg); color: var(--sk-released-fg); }
+
+.sk-scheduler .sk-ghost {
+  outline: 2px dashed var(--sk-accent);
+  outline-offset: -2px;
+  opacity: 0.85;
+}
+
+.sk-scheduler .sk-moving-away {
+  opacity: 0.4;
+}
+
+.sk-event-body {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  padding: 0.25rem 0.3rem;
+  line-height: 1.2;
+}
+
+/* Short appointments are narrow: wrap instead of cutting the customer's name off. */
+.sk-event-title,
+.sk-event-meta,
+.sk-event-plan {
+  white-space: normal;
+}
+
+.sk-event-title {
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+
+.sk-event-meta {
+  font-size: 0.72rem;
+}
+
+.sk-event-plan {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.sk-event-agent {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.25rem;
+  padding: 0 0.25rem;
+  border-radius: 3px;
+  background: var(--sk-ink);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+}
+
+.sk-side {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sk-paper);
+  border-left: 1px solid var(--sk-line);
+  overflow-y: auto;
+}
+
+.sk-tabs {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  background: var(--sk-paper);
+  border-bottom: 1px solid var(--sk-line);
+}
+
+.sk-board .sk-tabs button {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--sk-muted);
+  font-weight: 600;
+}
+
+.sk-board .sk-tabs button[aria-selected='true'] {
+  border-bottom-color: var(--sk-accent);
+  color: var(--sk-ink);
+}
+
+.sk-copilot {
+  padding: 0.85rem;
+}
+
+.sk-copilot form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sk-copilot label {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.sk-copilot textarea {
+  font: inherit;
+  padding: 0.5rem;
+  resize: vertical;
+  border: 1px solid var(--sk-line);
+  border-radius: 6px;
+}
+
+.sk-copilot form button {
+  align-self: flex-end;
+}
+
+.sk-reply {
+  margin: 0.8rem 0 0;
+  padding: 0.6rem;
+  border-radius: 6px;
+  background: var(--sk-wash);
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+}
+
+.sk-plan {
+  margin-top: 0.8rem;
+  padding: 0.7rem;
+  border: 1px solid var(--sk-line);
+  border-top: 3px solid var(--sk-accent);
+  border-radius: 6px;
+}
+
+.sk-plan-executed { border-top-color: #17803d; }
+.sk-plan-failed { border-top-color: var(--sk-danger); }
+.sk-plan-rejected { border-top-color: var(--sk-muted); }
+
+.sk-plan h2 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.sk-plan header p {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+
+.sk-plan ol {
+  margin: 0.6rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-plan li {
+  padding: 0.4rem 0 0.4rem 0.55rem;
+  border-left: 3px solid var(--sk-line);
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.sk-plan li.sk-step-money {
+  border-left-color: var(--sk-accent);
+}
+
+.sk-plan li p {
+  margin: 0.1rem 0 0;
+  color: var(--sk-muted);
+}
+
+.sk-plan li .sk-step-result { font-weight: 600; word-break: break-word; }
+.sk-plan li .sk-step-done { color: #17803d; }
+.sk-plan li .sk-step-failed { color: var(--sk-danger); }
+
+.sk-plan footer p {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--sk-muted);
+}
+
+.sk-actions {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.sk-audit {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sk-audit li {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid var(--sk-line);
+  font-size: 0.85rem;
+}
+
+.sk-audit div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.sk-audit time {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--sk-muted);
+}
+
+.sk-audit p {
+  margin: 0.15rem 0;
+  color: var(--sk-muted);
+}
+
+.sk-audit code {
+  display: block;
+  font-size: 0.72rem;
+  word-break: break-all;
+}
+
+.sk-audit-failed strong {
+  color: var(--sk-danger);
+}
+
+.sk-empty {
+  padding: 1rem;
+  color: var(--sk-muted);
+  font-size: 0.9rem;
+}
+
+.sk-error {
+  margin: 0.6rem 0 0;
+  color: var(--sk-danger);
+  font-size: 0.875rem;
+}
+
+.sk-banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--sk-review-bg);
+}
+
+.sk-gate {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: var(--sk-wash);
+  color: var(--sk-ink);
+}
+
+.sk-gate form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: min(320px, calc(100vw - 32px));
+  padding: 1.5rem;
+  background: var(--sk-paper);
+  border: 1px solid var(--sk-line);
+  border-radius: 8px;
+}
+
+.sk-gate h1 {
+  margin: 0;
+  font-size: 1.3rem;
+}
+
+.sk-gate p {
+  margin: 0;
+  color: var(--sk-muted);
+}
+
+.sk-gate input {
+  font: inherit;
+  padding: 0.45rem;
+  border: 1px solid var(--sk-line);
+  border-radius: 6px;
+}
+
+@media (max-width: 900px) {
+  .sk-board {
+    position: static;
+    min-height: 100vh;
+    margin: -2rem;
+  }
+
+  .sk-main {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .sk-scheduler {
+    min-height: 420px;
+  }
+
+  .sk-side {
+    border-left: 0;
+    border-top: 1px solid var(--sk-line);
+  }
+
+  .sk-legend {
+    margin-left: 0;
+  }
+}

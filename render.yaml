@@ -1,15 +1,26 @@
 # Render Blueprint for SlotKeeper (https://render.com/docs/blueprint-spec).
 # New > Blueprint > pick this repo. Render asks for every `sync: false` value; secrets never live here.
+databases:
+  # Paid plan on purpose: Render's free Postgres expires after 30 days, before judging ends on 12/15.
+  - name: slotkeeper-db
+    plan: basic-256mb
+    region: oregon
+    # Reachable only from Render services in this account, over the private network.
+    ipAllowList: []
+
 services:
   - type: web
     name: slotkeeper
     runtime: node
-    # Starter, not free: free instances sleep after 15 idle minutes, and bookings live in memory
-    # until the Postgres store lands, so a sleep would wipe them and drop PayPal webhooks.
+    # Starter, not free: free instances sleep after 15 idle minutes and would drop PayPal webhooks.
+    # One instance only: booking locks and the write queue live in the process (lib/storage/records.ts).
     plan: starter
+    numInstances: 1
     region: oregon
     branch: main
-    autoDeploy: true
+    # Manual on purpose: during a deploy the old and new instance overlap, and a change the old one
+    # makes after the new one loaded its records can be overwritten. Deploy at a quiet moment.
+    autoDeploy: false
     buildCommand: npm ci && npm run build
     startCommand: npm start
     # Cheap and credential-free; /api/health calls PayPal, which shouldn't decide if the app is up.
@@ -18,6 +29,13 @@ services:
       - key: NODE_VERSION
         value: 22.15.0
       # No NODE_OPTIONS=--use-system-ca here: that is only for HTTPS-inspecting antivirus on a dev PC.
+      # lib/storage/start.ts handles SIGTERM, so queued writes land before the process exits.
+      - key: NEXT_MANUAL_SIG_HANDLE
+        value: "true"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: slotkeeper-db
+          property: connectionString
       - key: NEXT_PUBLIC_PAYPAL_ENVIRONMENT
         value: sandbox
       # NEXT_PUBLIC_* values are baked in at build time; changing one needs a redeploy, not a restart.

@@ -60,7 +60,27 @@ you generate). PayPal webhooks need the public URL, so they are set up after the
    `PAYMENT.CAPTURE.REFUNDED`.
 2. Copy the Webhook ID into the service's `PAYPAL_WEBHOOK_ID` environment variable.
 
-Bookings are kept in memory for now, so a restart or redeploy clears them.
+The Blueprint also creates a Postgres database and sets `DATABASE_URL`. Bookings, payout batches,
+copilot plans and the audit log are saved there and loaded back at startup. Reads stay in memory and
+writes are queued, so the app runs as **one instance**; money flows wait for their write before they
+answer. If `DATABASE_URL` is set but the database can't be read, the server refuses to start rather
+than showing an empty schedule. Without `DATABASE_URL` (local development) data stays in memory.
+
+Known limit: during a deploy the old and new instance overlap for a moment. The new one loads its
+records at startup, so a change the old one makes after that is overwritten if the same booking is
+saved again. So `render.yaml` turns auto-deploy off: deploy by hand, when no bookings or payments are
+in progress.
+
+## Staff board
+
+`/staff` is the owner's day, built on a [Bryntum Scheduler](https://bryntum.com/products/scheduler/)
+(trial package, so it shows a watermark). Open it with the staff token.
+
+- Bookings are coloured by deposit state and update live over Server-Sent Events, from PayPal webhooks as well as staff actions.
+- The copilot panel previews a plan on the schedule before anything runs: a dashed ghost at the destination, a faded original, and a note for each money step. Nothing moves until the owner approves.
+- The audit log lists every action the copilot ran, with its PayPal ids.
+
+The copilot needs `ANTHROPIC_API_KEY`.
 
 ## How the PayPal integration is built
 

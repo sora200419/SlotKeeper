@@ -1,11 +1,12 @@
-import { errorResponse } from '@/lib/api/responses';
+import { errorResponse, staffBooking } from '@/lib/api/responses';
 import { requireStaff } from '@/lib/api/staff';
 import { onBookingChange } from '@/lib/booking/events';
+import { queuedWrites } from '@/lib/storage/records';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const HEARTBEAT_MS = 25_000;
+const HEARTBEAT_MS = 10_000;
 
 /**
  * Staff-only Server-Sent Events feed: one `booking` event per saved booking (checkout, staff money
@@ -34,9 +35,10 @@ export async function GET(request: Request) {
         }
       };
       const unsubscribe = onBookingChange((booking) => {
-        send(`event: booking\nid: ${booking.id}\ndata: ${JSON.stringify(booking)}\n\n`);
+        send(`event: booking\nid: ${booking.id}\ndata: ${JSON.stringify(staffBooking(booking))}\n\n`);
       });
-      const heartbeat = setInterval(() => send(': ping\n\n'), HEARTBEAT_MS);
+      // Doubles as the keep-alive, and tells an open board when the database has fallen behind.
+      const heartbeat = setInterval(() => send(`event: storage\ndata: ${JSON.stringify({ unsavedWrites: queuedWrites() })}\n\n`), HEARTBEAT_MS);
       stop = () => {
         if (closed) return;
         closed = true;

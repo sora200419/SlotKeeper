@@ -15,11 +15,12 @@ import { PayPalConfigError } from '@/lib/paypal/config';
 import { DepositError } from '@/lib/paypal/deposits';
 import { sanitizeError } from '@/lib/paypal/errors';
 import { PayoutError, runDailyPayouts, type PayoutBatchRecord, type PayoutDeps } from '@/lib/paypal/payouts';
+import { flushWrites } from '@/lib/storage/records';
 import type { AuditLog, Plan, PlanStep, PlanStore, StepResult } from './plan';
 
 export class PlanError extends Error {
   constructor(
-    readonly code: 'not_found' | 'not_proposed' | 'plan_expired',
+    readonly code: 'not_found' | 'not_proposed' | 'plan_expired' | 'storage_unavailable',
     readonly httpStatus: number,
     message: string,
   ) {
@@ -122,8 +123,13 @@ export function approvePlan(deps: ExecuteDeps, planId: string, now: Date = new D
     if (now.getTime() - Date.parse(plan.createdAt) > PLAN_TTL_MS) {
       throw new PlanError('plan_expired', 409, 'This plan is more than 30 minutes old; ask the copilot again.');
     }
-    // Marked before anything runs: if the process dies mid-plan it can't be approved a second time.
+    // Marked, and saved to the database, before anything runs: if the process dies mid-plan it can't be
+    // approved a second time. A plan must not start moving money while that can't be guaranteed.
     deps.plans.save({ ...plan, status: 'executing', decidedAt: now.toISOString() });
+    if (!(await flushWrites())) {
+      deps.plans.save(plan);
+      throw new PlanError('storage_unavailable', 503, 'The database is not answering, so nothing was run. Try again in a moment.');
+    }
 
     const results: StepResult[] = [];
     let failed = false;

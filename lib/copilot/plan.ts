@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { moveTimeProblem } from '@/lib/booking/bookings';
 import { findStaff } from '@/lib/booking/staff';
 import type { BookingStore } from '@/lib/booking/store';
+import { loadedRecords, persist } from '@/lib/storage/records';
 
 /**
  * One step of an owner-approved plan. Each money step maps onto one function from the payment
@@ -96,12 +97,37 @@ const globalCopilot = globalThis as typeof globalThis & {
 };
 
 export function getPlanStore(): PlanStore {
-  globalCopilot.__slotkeeperPlans ??= createMemoryPlanStore();
+  if (!globalCopilot.__slotkeeperPlans) {
+    const memory = createMemoryPlanStore();
+    const store: PlanStore = {
+      get: (id) => memory.get(id),
+      save: (plan) => {
+        memory.save(plan);
+        persist('plan', plan.id, plan);
+      },
+    };
+    for (const plan of loadedRecords<Plan>('plan')) {
+      // The server stopped mid-plan: nothing will finish it, and the audit log shows what ran.
+      if (plan.status === 'executing') store.save({ ...plan, status: 'failed', results: plan.results ?? [] });
+      else memory.save(plan);
+    }
+    globalCopilot.__slotkeeperPlans = store;
+  }
   return globalCopilot.__slotkeeperPlans;
 }
 
 export function getAuditLog(): AuditLog {
-  globalCopilot.__slotkeeperAudit ??= createMemoryAuditLog();
+  if (!globalCopilot.__slotkeeperAudit) {
+    const memory = createMemoryAuditLog();
+    for (const entry of loadedRecords<AuditEntry>('audit')) memory.append(entry);
+    globalCopilot.__slotkeeperAudit = {
+      list: (limit) => memory.list(limit),
+      append: (entry) => {
+        memory.append(entry);
+        persist('audit', `${entry.planId}-${entry.stepIndex}`, entry);
+      },
+    };
+  }
   return globalCopilot.__slotkeeperAudit;
 }
 

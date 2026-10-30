@@ -4,6 +4,7 @@ import { businessDay, dailyEarnings } from '@/lib/booking/earnings';
 import { withBookingLock } from '@/lib/booking/locks';
 import { findStaff } from '@/lib/booking/staff';
 import type { BookingStore } from '@/lib/booking/store';
+import { loadedRecords, persist } from '@/lib/storage/records';
 import { isDefiniteRefusal, type PayPalFailure } from './errors';
 import { PayPalRestError, PayPalUnreachableError, type RestTransport } from './rest';
 
@@ -97,7 +98,17 @@ export function createMemoryPayoutStore(): PayoutStore {
 const globalPayouts = globalThis as typeof globalThis & { __slotkeeperPayouts?: PayoutStore };
 
 export function getPayoutStore(): PayoutStore {
-  globalPayouts.__slotkeeperPayouts ??= createMemoryPayoutStore();
+  if (!globalPayouts.__slotkeeperPayouts) {
+    const memory = createMemoryPayoutStore();
+    for (const record of loadedRecords<PayoutBatchRecord>('payout')) memory.save(record);
+    globalPayouts.__slotkeeperPayouts = {
+      ...memory,
+      save: (record) => {
+        memory.save(record);
+        persist('payout', record.day, record);
+      },
+    };
+  }
   return globalPayouts.__slotkeeperPayouts;
 }
 

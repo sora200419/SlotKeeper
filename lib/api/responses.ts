@@ -59,14 +59,19 @@ export function errorResponse(err: unknown): NextResponse {
   throw sanitizeError(err, 'Unexpected error');
 }
 
+/** A booking as staff see it. The booking token's hash is a credential check value; it never leaves the server. */
+export function staffBooking(booking: Booking): Booking {
+  const { accessTokenHash: _hash, ...rest } = booking;
+  return rest;
+}
+
 /**
  * A booking as customer-facing routes may show it: the saved wallet's vault and PayPal customer ids
  * are staff-only (whoever has them plus our credentials can charge the wallet), so only its status
- * is kept. Staff routes and the staff SSE feed return the full booking.
+ * is kept.
  */
 export function publicBooking(booking: Booking): Booking {
-  // The booking token's hash is a credential check value; it never leaves the server.
-  const { accessTokenHash: _hash, ...rest } = booking;
+  const rest = staffBooking(booking);
   const wallet = rest.hold?.savedWallet;
   if (!wallet) return rest;
   return {
