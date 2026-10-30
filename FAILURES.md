@@ -72,6 +72,13 @@
 - **规则去向**：全局 ~/.claude/CLAUDE.md
 - **复发记录**：无
 
+### F-009 · 2026-10-30 · 映射表有两份，只改了一份，authorize 的拒绝路径漏修
+- **现象**：提示词 10 用沙盒探测发现 PAYER_CANNOT_PAY 等拒绝代码没映射，只改了 `deposit-actions.ts` 的 DECLINE_ISSUES；`deposits.ts` 里同名集合没动，authorize 被 TRANSACTION_REFUSED / PAYER_CANNOT_PAY 拒绝时成了 paypal_error，被拒订单继续复用（审查 R1）。
+- **根因**：没验证——探测只跑了 capture、void、reauthorize、refund，authorize 没探；改映射前也没搜同名常量，默认它只有一份。
+- **修复**：`lib/paypal/deposits.ts` 补上两个代码；`tests/paypal/negative-paths.test.ts` 断言 declined、orderSpent 且下一次新建订单，沙盒表同步；突变确认撤回后 2 个用例失败。
+- **规则去向**：全局 ~/.claude/CLAUDE.md
+- **复发记录**：无
+
 ## 精简记录
 
 | 日期 | 动作（删除 / 合并 / 自动化 / 升级为全局） | 涉及条目 | 说明 |

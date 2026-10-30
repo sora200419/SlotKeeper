@@ -62,7 +62,7 @@ export interface ReturnUrls {
 const ORDER_REUSE_MS = 2 * 60 * 60 * 1000;
 
 /** PayPal issues that mean "this funding source said no"; the order can't be reused. */
-const DECLINE_ISSUES = new Set(['INSTRUMENT_DECLINED', 'PAYER_ACTION_REQUIRED']);
+const DECLINE_ISSUES = new Set(['INSTRUMENT_DECLINED', 'PAYER_ACTION_REQUIRED', 'TRANSACTION_REFUSED', 'PAYER_CANNOT_PAY']);
 
 /*
  * PayPal-Request-Id values are deterministic rather than random UUIDs on purpose: the same logical

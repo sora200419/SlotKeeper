@@ -37,6 +37,16 @@ npm run typecheck
 npm run build
 ```
 
+### Sandbox negative tests
+
+`npm test` never touches the network. An opt-in suite calls the real PayPal sandbox with the `PayPal-Mock-Response` header and fake ids, so no money moves. Turn on Negative Testing for the sandbox business account first, then:
+
+```powershell
+$env:PAYPAL_SANDBOX_TESTS = '1'; $env:NODE_OPTIONS = '--use-system-ca'; npm run test:sandbox
+```
+
+It needs Node 22.15 or later, reads `.env.local`, and refuses to run against production. Without `PAYPAL_SANDBOX_TESTS=1` every test is skipped.
+
 ## Deploy (Render)
 
 [`render.yaml`](render.yaml) is a Render Blueprint: in Render choose **New > Blueprint**, pick this

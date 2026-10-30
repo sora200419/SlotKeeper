@@ -52,7 +52,15 @@ const ALREADY_CAPTURED_ISSUES = new Set([
   'PREVIOUSLY_CAPTURED',
   'MAX_CAPTURE_COUNT_EXCEEDED',
 ]);
-const DECLINE_ISSUES = new Set(['INSTRUMENT_DECLINED', 'TRANSACTION_REFUSED', 'PAYER_ACTION_REQUIRED']);
+const DECLINE_ISSUES = new Set([
+  'INSTRUMENT_DECLINED',
+  'TRANSACTION_REFUSED',
+  'PAYER_ACTION_REQUIRED',
+  // Seen from the sandbox via PayPal-Mock-Response (npm run test:sandbox).
+  'PAYER_CANNOT_PAY',
+  'AUTHORIZATION_DENIED',
+  'REFUND_FAILED_INSUFFICIENT_FUNDS',
+]);
 
 function loadHeldBooking(store: BookingStore, bookingId: string): HeldBooking {
   const booking = store.get(bookingId);
@@ -90,7 +98,9 @@ function fromActionFailure(failure: PayPalFailure, action: string): DepositError
     return new DepositError(
       'authorization_expired',
       409,
-      'The PayPal hold has expired. Reauthorize it first, or ask the customer to pay again.',
+      action === 'capture the deposit'
+        ? 'The PayPal hold has expired. Reauthorize it first, or ask the customer to pay again.'
+        : 'The PayPal hold has expired. Ask the customer to pay again if a deposit is still needed.',
       failure,
     );
   }
@@ -106,7 +116,7 @@ function fromActionFailure(failure: PayPalFailure, action: string): DepositError
     );
   }
   if (issue && DECLINE_ISSUES.has(issue)) {
-    return new DepositError('declined', 402, `PayPal declined the ${action}.`, failure);
+    return new DepositError('declined', 402, `PayPal declined the request to ${action}.`, failure);
   }
   return new DepositError(
     'paypal_error',
