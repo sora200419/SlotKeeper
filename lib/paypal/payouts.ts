@@ -4,7 +4,7 @@ import { businessDay, dailyEarnings } from '@/lib/booking/earnings';
 import { withBookingLock } from '@/lib/booking/locks';
 import { findStaff } from '@/lib/booking/staff';
 import type { BookingStore } from '@/lib/booking/store';
-import { loadedRecords, persist } from '@/lib/storage/records';
+import { loadedRecords, persist, registerStore } from '@/lib/storage/records';
 import { isDefiniteRefusal, type PayPalFailure } from './errors';
 import { PayPalRestError, PayPalUnreachableError, type RestTransport } from './rest';
 
@@ -101,13 +101,18 @@ export function getPayoutStore(): PayoutStore {
   if (!globalPayouts.__slotkeeperPayouts) {
     const memory = createMemoryPayoutStore();
     for (const record of loadedRecords<PayoutBatchRecord>('payout')) memory.save(record);
-    globalPayouts.__slotkeeperPayouts = {
+    const persisted: PayoutStore = {
       ...memory,
       save: (record) => {
         memory.save(record);
         persist('payout', record.day, record);
       },
     };
+    registerStore('payout', {
+      apply: (data) => memory.save(data as PayoutBatchRecord),
+      onConflict: (data) => persisted.save({ ...(data as PayoutBatchRecord), state: 'needs_review' }),
+    });
+    globalPayouts.__slotkeeperPayouts = persisted;
   }
   return globalPayouts.__slotkeeperPayouts;
 }

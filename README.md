@@ -66,10 +66,17 @@ writes are queued, so the app runs as **one instance**; money flows wait for the
 answer. If `DATABASE_URL` is set but the database can't be read, the server refuses to start rather
 than showing an empty schedule. Without `DATABASE_URL` (local development) data stays in memory.
 
-Known limit: during a deploy the old and new instance overlap for a moment. The new one loads its
-records at startup, so a change the old one makes after that is overwritten if the same booking is
-saved again. So `render.yaml` turns auto-deploy off: deploy by hand, when no bookings or payments are
-in progress.
+During a deploy the old and new instance overlap for a moment, so every record carries a revision.
+A save based on an old revision never overwrites a newer one: the newer version stays, the losing one
+is kept as a `conflict` record, and the booking or payout batch goes to staff review. A money flow
+re-reads its record when it takes the lock, and that record then stays fixed until the lock ends.
+Each instance picks up the other's changes every 10 seconds, so for up to 10 seconds a new booking on
+one instance is invisible to the other, and the same slot could be booked twice in that window.
+`render.yaml` leaves auto-deploy off, so deploys happen at a quiet moment.
+
+This protects releases that have revisions. Release f76ebfa and earlier write without any check: a
+trigger makes their writes visible to newer instances, but they can still overwrite a newer save
+unnoticed. So the first deploy with a database, or a rollback to such a release, needs a quiet moment.
 
 ## Staff board
 

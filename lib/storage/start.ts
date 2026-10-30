@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { locksIdle } from '@/lib/booking/locks';
-import { connectStorage, describeDbError, flushWrites } from './records';
+import { connectStorage, describeDbError, flushWrites, followChanges } from './records';
 
 const ATTEMPTS = 5;
 const SHUTDOWN_LOCKS_MS = 15_000;
@@ -59,6 +59,7 @@ export async function startStorage(databaseUrl: string | undefined = process.env
     try {
       await connectStorage(pool);
       console.info('[storage] loaded saved records from Postgres');
+      followChanges();
       return;
     } catch (err) {
       console.error('[storage] could not load records', { attempt, error: describeDbError(err) });

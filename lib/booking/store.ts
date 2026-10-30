@@ -1,5 +1,5 @@
 import 'server-only';
-import { loadedRecords, persist } from '@/lib/storage/records';
+import { loadedRecords, persist, registerStore } from '@/lib/storage/records';
 import type { Money } from './catalog';
 import { publishBookingChange } from './events';
 
@@ -190,7 +190,7 @@ export function withChangeEvents(store: BookingStore): BookingStore {
 /** Wraps a store so every save also goes to Postgres, and seeds it with what was saved before. */
 export function withPersistence(store: BookingStore): BookingStore {
   for (const booking of loadedRecords<Booking>('booking')) store.save(booking);
-  return {
+  const persisted: BookingStore = {
     get: (id) => store.get(id),
     list: () => store.list(),
     save: (booking) => {
@@ -198,6 +198,18 @@ export function withPersistence(store: BookingStore): BookingStore {
       persist('booking', booking.id, booking);
     },
   };
+  registerStore('booking', {
+    apply: (data) => {
+      store.save(data as Booking);
+      publishBookingChange(data as Booking);
+    },
+    onConflict: (data) => {
+      const flagged: Booking = { ...(data as Booking), status: 'deposit_needs_review' };
+      persisted.save(flagged);
+      publishBookingChange(flagged);
+    },
+  });
+  return persisted;
 }
 
 export function getBookingStore(): BookingStore {

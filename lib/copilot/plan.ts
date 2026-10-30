@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { moveTimeProblem } from '@/lib/booking/bookings';
 import { findStaff } from '@/lib/booking/staff';
 import type { BookingStore } from '@/lib/booking/store';
-import { loadedRecords, persist } from '@/lib/storage/records';
+import { loadedRecords, persist, registerStore } from '@/lib/storage/records';
 
 /**
  * One step of an owner-approved plan. Each money step maps onto one function from the payment
@@ -91,6 +91,9 @@ export function createMemoryAuditLog(): AuditLog {
   };
 }
 
+/** Longer than any plan runs: 50 steps at a few PayPal round trips each. */
+const PLAN_RUN_LIMIT_MS = 30 * 60 * 1000;
+
 const globalCopilot = globalThis as typeof globalThis & {
   __slotkeeperPlans?: PlanStore;
   __slotkeeperAudit?: AuditLog;
@@ -106,10 +109,22 @@ export function getPlanStore(): PlanStore {
         persist('plan', plan.id, plan);
       },
     };
+    registerStore('plan', { apply: (data) => memory.save(data as Plan) });
+    // A plan left "executing" means the server stopped mid-plan: nothing will finish it, and the audit
+    // log shows what ran. But during a deploy the old instance may still be running it, so a recent
+    // one gets until the plan could possibly have finished before it is written off.
+    const writeOff = (plan: Plan) => store.save({ ...plan, status: 'failed', results: plan.results ?? [] });
     for (const plan of loadedRecords<Plan>('plan')) {
-      // The server stopped mid-plan: nothing will finish it, and the audit log shows what ran.
-      if (plan.status === 'executing') store.save({ ...plan, status: 'failed', results: plan.results ?? [] });
-      else memory.save(plan);
+      memory.save(plan);
+      if (plan.status !== 'executing') continue;
+      const age = Date.now() - Date.parse(plan.decidedAt ?? '');
+      if (!(age < PLAN_RUN_LIMIT_MS)) writeOff(plan);
+      else {
+        setTimeout(() => {
+          const current = memory.get(plan.id);
+          if (current?.status === 'executing') writeOff(current);
+        }, PLAN_RUN_LIMIT_MS - age).unref();
+      }
     }
     globalCopilot.__slotkeeperPlans = store;
   }
@@ -120,6 +135,7 @@ export function getAuditLog(): AuditLog {
   if (!globalCopilot.__slotkeeperAudit) {
     const memory = createMemoryAuditLog();
     for (const entry of loadedRecords<AuditEntry>('audit')) memory.append(entry);
+    registerStore('audit', { apply: (data) => memory.append(data as AuditEntry) });
     globalCopilot.__slotkeeperAudit = {
       list: (limit) => memory.list(limit),
       append: (entry) => {

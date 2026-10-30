@@ -69,7 +69,7 @@ describe('GET /api/bookings/events', () => {
     await writes.connectStorage({
       query: async (sql) => {
         if (sql.startsWith('INSERT') && refuse) throw new Error('database down');
-        return { rows: [] };
+        return { rows: sql.startsWith('INSERT') ? [{ revision: 1 }] : [] };
       },
     });
     vi.spyOn(console, 'error').mockImplementation(() => {});

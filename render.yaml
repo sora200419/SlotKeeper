@@ -18,8 +18,9 @@ services:
     numInstances: 1
     region: oregon
     branch: main
-    # Manual on purpose: during a deploy the old and new instance overlap, and a change the old one
-    # makes after the new one loaded its records can be overwritten. Deploy at a quiet moment.
+    # Manual on purpose: during a deploy the old and new instance overlap. Revisions stop them overwriting
+    # each other (lib/storage/records.ts), but a clash means staff review, and releases before revisions
+    # have no such check, so deploy when quiet.
     autoDeploy: false
     buildCommand: npm ci && npm run build
     startCommand: npm start

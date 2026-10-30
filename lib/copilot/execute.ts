@@ -15,7 +15,7 @@ import { PayPalConfigError } from '@/lib/paypal/config';
 import { DepositError } from '@/lib/paypal/deposits';
 import { sanitizeError } from '@/lib/paypal/errors';
 import { PayoutError, runDailyPayouts, type PayoutBatchRecord, type PayoutDeps } from '@/lib/paypal/payouts';
-import { flushWrites } from '@/lib/storage/records';
+import { flushWrites, takeConflict } from '@/lib/storage/records';
 import type { AuditLog, Plan, PlanStep, PlanStore, StepResult } from './plan';
 
 export class PlanError extends Error {
@@ -130,6 +130,8 @@ export function approvePlan(deps: ExecuteDeps, planId: string, now: Date = new D
       deps.plans.save(plan);
       throw new PlanError('storage_unavailable', 503, 'The database is not answering, so nothing was run. Try again in a moment.');
     }
+    // Another server instance approved it first (deploys overlap): only one may run it.
+    if (takeConflict('plan', planId)) throw new PlanError('not_proposed', 409, 'Another server is already running this plan.');
 
     const results: StepResult[] = [];
     let failed = false;
@@ -173,6 +175,8 @@ export function rejectPlan(plans: PlanStore, planId: string, now: Date = new Dat
     if (plan.status !== 'proposed') throw new PlanError('not_proposed', 409, `This plan is already ${plan.status}.`);
     const rejected: Plan = { ...plan, status: 'rejected', decidedAt: now.toISOString() };
     plans.save(rejected);
+    await flushWrites();
+    if (takeConflict('plan', planId)) throw new PlanError('not_proposed', 409, 'Another server is already running this plan.');
     return rejected;
   });
 }
