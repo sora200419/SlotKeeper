@@ -22,6 +22,7 @@ services:
     # each other (lib/storage/records.ts), but a clash means staff review, and releases before revisions
     # have no such check, so deploy when quiet.
     autoDeploy: false
+    # `npm run build` uses webpack: Turbopack peaked at 21 GB locally and Render stops a build at 8 GB.
     buildCommand: npm ci && npm run build
     startCommand: npm start
     # Cheap and credential-free; /api/health calls PayPal, which shouldn't decide if the app is up.
