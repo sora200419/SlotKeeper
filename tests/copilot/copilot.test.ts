@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBooking } from '@/lib/booking/bookings';
 import { createMemoryBookingStore, type Booking, type BookingStore } from '@/lib/booking/store';
-import { createCopilotModel, runCopilot, type CopilotModel } from '@/lib/copilot/copilot';
+import { createCopilotModel, DEFAULT_COPILOT_MODEL, readCopilotModel, runCopilot, type CopilotModel } from '@/lib/copilot/copilot';
 import { buildPlan, createMemoryPlanStore, PlanValidationError } from '@/lib/copilot/plan';
 
 // Fixed clock: tests never depend on the real date.
@@ -78,14 +78,15 @@ describe('runCopilot', () => {
     // Nothing moved: the booking is untouched.
     expect(store.get(b.id)).toMatchObject({ status: 'deposit_held', staffId: 'maria' });
 
-    // Request shape: model, adaptive thinking, explicit effort, refusal fallback, our tools.
+    // Request shape: Haiku by default, adaptive thinking, explicit effort, our tools. Haiku 5.5 has no
+    // server-side fallback, so neither the parameter nor its beta header is sent.
     expect(requests[0]).toMatchObject({
-      model: 'claude-opus-5-5',
+      model: 'claude-haiku-5-5',
       thinking: { type: 'adaptive' },
       output_config: { effort: 'high' },
-      betas: ['server-side-fallback-2026-07-01'],
-      fallbacks: 'default',
     });
+    expect(requests[0]).not.toHaveProperty('fallbacks');
+    expect(requests[0]).not.toHaveProperty('betas');
     expect(requests[0].tools!.map((t) => (t as { name: string }).name)).toEqual([
       'list_bookings',
       'get_booking',
@@ -161,6 +162,49 @@ describe('runCopilot', () => {
 
   it('is disabled without ANTHROPIC_API_KEY', () => {
     expect(() => createCopilotModel({})).toThrow(expect.objectContaining({ code: 'missing_config', httpStatus: 500 }));
+  });
+});
+
+describe('which model the copilot runs on', () => {
+  const ask = (model: CopilotModel) =>
+    runCopilot({ model, bookings: createMemoryBookingStore(), plans: createMemoryPlanStore(), timeZone: 'UTC' }, 'x', NOW);
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('defaults to Haiku 5.5 when COPILOT_MODEL is unset or blank', () => {
+    expect(readCopilotModel({})).toEqual({ id: 'claude-haiku-5-5', fallback: false });
+    expect(readCopilotModel({ COPILOT_MODEL: '  ' })).toEqual({ id: 'claude-haiku-5-5', fallback: false });
+    expect(DEFAULT_COPILOT_MODEL).toBe('claude-haiku-5-5');
+  });
+
+  it.each(['claude-sonnet-5-5', 'claude-opus-5-5'])('%s is selectable and asks for the refusal fallback', async (id) => {
+    vi.stubEnv('COPILOT_MODEL', id);
+    const { model, requests } = fakeModel(message([text('ok')], 'end_turn'));
+    await ask(model);
+    expect(requests[0]).toMatchObject({ model: id, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' });
+  });
+
+  it('Haiku never gets the fallback parameter: the API rejects or ignores it there', async () => {
+    vi.stubEnv('COPILOT_MODEL', 'claude-haiku-5-5');
+    const { model, requests } = fakeModel(message([text('ok')], 'end_turn'));
+    await ask(model);
+    expect(requests[0]).not.toHaveProperty('fallbacks');
+    expect(requests[0]).not.toHaveProperty('betas');
+  });
+
+  it.each(['gpt-5', 'claude-opus-4-1', '__proto__', 'constructor'])('an unknown model "%s" stops the copilot before any request', async (id) => {
+    vi.stubEnv('COPILOT_MODEL', id);
+    const { model, requests } = fakeModel(message([text('ok')], 'end_turn'));
+    await expect(ask(model)).rejects.toMatchObject({ code: 'missing_config', httpStatus: 500, message: expect.stringContaining('claude-haiku-5-5') });
+    expect(requests).toHaveLength(0);
+  });
+
+  it('a refusal on Haiku stays a clear error: nothing re-runs it elsewhere', async () => {
+    const { model, requests } = fakeModel(message([], 'refusal'));
+    await expect(ask(model)).rejects.toMatchObject({ code: 'model_refused', httpStatus: 422 });
+    expect(requests).toHaveLength(1);
   });
 });
 

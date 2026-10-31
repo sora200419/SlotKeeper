@@ -5,7 +5,30 @@ import { sanitizeError } from '@/lib/paypal/errors';
 import { buildPlan, PlanValidationError, type Plan, type PlanStore } from './plan';
 import { COPILOT_TOOLS, runReadTool } from './tools';
 
-export const COPILOT_MODEL = 'claude-opus-5-5';
+/**
+ * Models the copilot may run on. `fallback`: whether a request a safeguard declines can be re-run on a
+ * fallback model by the API. Haiku 5.5 has no such fallback, and the parameter is not sent to it.
+ */
+const COPILOT_MODELS = {
+  'claude-haiku-5-5': { fallback: false },
+  'claude-sonnet-5-5': { fallback: true },
+  'claude-opus-5-5': { fallback: true },
+} as const;
+
+export type CopilotModelId = keyof typeof COPILOT_MODELS;
+
+/** The cheapest: a plan is checked in code and approved by the owner before anything runs. */
+export const DEFAULT_COPILOT_MODEL: CopilotModelId = 'claude-haiku-5-5';
+
+/** COPILOT_MODEL picks the model; unset means the default. An unknown name stops the copilot, loudly. */
+export function readCopilotModel(env: Record<string, string | undefined> = process.env): { id: CopilotModelId; fallback: boolean } {
+  const id = env.COPILOT_MODEL?.trim() || DEFAULT_COPILOT_MODEL;
+  if (!Object.hasOwn(COPILOT_MODELS, id)) {
+    throw new CopilotError('missing_config', 500, `COPILOT_MODEL must be one of ${Object.keys(COPILOT_MODELS).join(', ')}.`);
+  }
+  return { id: id as CopilotModelId, fallback: COPILOT_MODELS[id as CopilotModelId].fallback };
+}
+
 const MAX_TURNS = 8;
 
 export class CopilotError extends Error {
@@ -75,20 +98,20 @@ function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {
  * nothing that moves money runs here (see approvePlan).
  */
 export async function runCopilot(deps: CopilotDeps, request: string, now: Date = new Date()): Promise<CopilotReply> {
+  const model = readCopilotModel();
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: request }];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     let response: Anthropic.Beta.BetaMessage;
     try {
       response = await deps.model.beta.messages.create({
-        model: COPILOT_MODEL,
+        model: model.id,
         max_tokens: 16000,
         thinking: { type: 'adaptive' },
-        // Planning money moves: think it through. Claude Opus 5.5 defaults to medium.
+        // Planning money moves: think it through. These models default to medium.
         output_config: { effort: 'high' },
-        // If this model declines, the API re-runs the request on a fallback model it picks.
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
+        // If the model declines, the API re-runs the request on a fallback model it picks (not on Haiku).
+        ...(model.fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
         system: SYSTEM,
         tools: COPILOT_TOOLS,
         messages,

@@ -87,7 +87,10 @@ unnoticed. So the first deploy with a database, or a rollback to such a release,
 - The copilot panel previews a plan on the schedule before anything runs: a dashed ghost at the destination, a faded original, and a note for each money step. Nothing moves until the owner approves.
 - The audit log lists every action the copilot ran, with its PayPal ids.
 
-The copilot needs `ANTHROPIC_API_KEY`.
+The copilot needs `ANTHROPIC_API_KEY` and runs on Claude Haiku 5.5 unless `COPILOT_MODEL` names
+`claude-sonnet-5-5` or `claude-opus-5-5`. It only reads bookings and proposes a plan; the plan is checked
+in code and runs only after the owner approves it. Haiku has no server-side refusal fallback, so a
+request its safeguards decline is reported as such, and Sonnet and Opus get the fallback.
 
 ## How the PayPal integration is built
 
