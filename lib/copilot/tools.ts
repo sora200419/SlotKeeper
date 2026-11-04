@@ -31,7 +31,7 @@ const STEP_SCHEMA = {
   type: 'object',
   description:
     'One step. type decides which other fields apply: move_booking (bookingId, staffId and/or startsAt), ' +
-    'capture_deposit (bookingId, reason, optional amountCents for a no-show fee), void_deposit (bookingId), ' +
+    'capture_deposit (bookingId, reason, optional amountCents for a no-show fee), void_deposit (bookingId; releases the hold and cancels the booking), ' +
     'reauthorize_deposit (bookingId), refund_deposit (bookingId, optional amountCents), ' +
     'charge_saved_wallet (bookingId, optional amountCents), run_payouts (day).',
   properties: {

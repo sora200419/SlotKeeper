@@ -233,6 +233,20 @@ describe('the copilot knows the current time', () => {
   });
 });
 
+describe('what the copilot is told a void does', () => {
+  // The behaviour itself (a void step leaves the booking "cancelled") is tested in tests/copilot/execute.test.ts.
+  it('tells the model that void_deposit cancels the booking, in the prompt and in the step schema', async () => {
+    const { model, requests } = fakeModel(message([text('ok')], 'end_turn'));
+    await runCopilot({ model, bookings: createMemoryBookingStore(), plans: createMemoryPlanStore(), timeZone: 'UTC' }, 'Cancel Ana', NOW);
+    // Whitespace collapsed, so rewrapping the prompt does not break the test.
+    const system = String(requests[0].system).replace(/\s+/g, ' ');
+    expect(system).toContain('void_deposit also cancels the booking when the void succeeds');
+    expect(system).toContain('Do not tell the owner the booking still needs cancelling after it.');
+    expect(system).toContain("A booking whose deposit is not held (unpaid, or already captured) can't be cancelled from a plan.");
+    expect(JSON.stringify(requests[0].tools)).toContain('void_deposit (bookingId; releases the hold and cancels the booking)');
+  });
+});
+
 describe('which model the copilot runs on', () => {
   const ask = (model: CopilotModel) =>
     runCopilot({ model, bookings: createMemoryBookingStore(), plans: createMemoryPlanStore(), timeZone: 'UTC' }, 'x', NOW);

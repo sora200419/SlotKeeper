@@ -71,6 +71,9 @@ and approves it; only then does it run. Do not say anything has been done: say w
 Rules for plans:
 - Use real booking ids from list_bookings or get_booking. Never invent ids or amounts.
 - A deposit that is held but not captured is released with void_deposit (free), not refund_deposit.
+- void_deposit also cancels the booking when the void succeeds: it is how a booking with a held
+  deposit is cancelled. Do not tell the owner the booking still needs cancelling after it.
+- A booking whose deposit is not held (unpaid, or already captured) can't be cancelled from a plan.
 - refund_deposit is only for money that was captured.
 - capture_deposit with reason "no_show" may take a smaller fee (amountCents); "completed" takes the whole deposit.
 - charge_saved_wallet only works after the hold is finished (completed or no-show) for a customer who saved their wallet.

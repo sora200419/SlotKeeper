@@ -84,14 +84,16 @@ PayPal/
 - [x] Board money-action buttons with confirmations (11-04, 6306bff); deployed to Render 11-04, storage loaded from Postgres
 - [x] Copilot budget guard: effort `medium`, at most `COPILOT_DAILY_LIMIT` (default 40) requests per rolling 24 h, in memory (11-04); deployed 11-04 (890c4af), first live Haiku answer worked
 - [x] Copilot gets the current date, time and UTC offset in `BUSINESS_TIME_ZONE` with every request (11-04); deployed 11-04 (ee37d25), answers "tomorrow" correctly
-- [x] Booking form reads the typed time as shop time in `BUSINESS_TIME_ZONE`; confirmation and hold expiry shown in shop time (11-04); not deployed yet
+- [x] Booking form reads the typed time as shop time in `BUSINESS_TIME_ZONE`; confirmation and hold expiry shown in shop time (11-04); deployed 11-04 (9c9e022), checked live
+- [x] Live copilot runs on Render (11-05): a move plan and a void plan proposed, approved and audited; the void entry carries the PayPal order and authorization ids
+- [x] Copilot told that void_deposit also cancels the booking (11-05); not deployed yet
 
 **In progress**
 - [ ] Nothing in progress.
 
 **To do (by priority)**
 - [ ] Rotate the PayPal secret and STAFF_API_TOKEN; add ANTHROPIC_API_KEY with a spending cap (Render + `.env.local`)
-- [ ] Live copilot plan → approve → audit log run (a question already works); check the "Persistence Check" booking survived a restart (it is dated 11-02, before today); MCP smoke test with a real client
+- [ ] Check the "Persistence Check" booking survived a restart (it is dated 11-02, before today); MCP smoke test with a real client
 - [ ] Decide whether judges get a staff token (docs/devpost.md checklist item 1)
 - [ ] Video (under 3 min), screenshots, one sourced no-show statistic
 - [ ] GitHub About fields (description, website, topics)
@@ -99,7 +101,8 @@ PayPal/
 - [ ] Submit on Devpost by 11-11
 
 **Known issues**
-- The copilot has answered one live question; a live plan and approval has not run yet.
+- Copilot requests are independent: it does not remember the previous message, so a follow-up must restate the whole request.
+- The audit log shows times in the viewer's browser zone, not shop time.
 - Locally the copilot and booking form use UTC unless `.env.local` sets `BUSINESS_TIME_ZONE` (Render sets America/Los_Angeles).
 - POST /api/bookings (the /book form) does not check opening hours (9:00-18:00); only MCP slot search does. Test bookings at 18:00 and 19:00 PT exist.
 - MCP: not confirmed live that PayPal returns the approval link for an order created with `return=minimal`.
