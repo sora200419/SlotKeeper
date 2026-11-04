@@ -15,7 +15,9 @@ const LIMITS = {
   fileLinesError: 250,
   rulesWarn: 20,
   rulesError: 30,
+  // The same two sentences take 2-3 times as many characters in English as in Chinese.
   ruleChars: 200,
+  ruleCharsLatin: 450,
   reviewAfterDays: 90,
 };
 
@@ -87,7 +89,10 @@ function lint({ global, file }) {
       continue;
     }
     const [, date, , rule] = m;
-    if (text.length > LIMITS.ruleChars) warnings.push(`${where} rule is too long (${text.length} characters); keep it to 2 sentences.`);
+    // A rule counts as Chinese when a fifth of it is Chinese, so an English rule quoting one word keeps the English limit.
+    const cjk = (rule.match(/[一-鿿]/g) || []).length;
+    const maxChars = cjk * 5 >= rule.length ? LIMITS.ruleChars : LIMITS.ruleCharsLatin;
+    if (text.length > maxChars) warnings.push(`${where} rule is too long (${text.length} characters); keep it to 2 sentences.`);
     const sentences = rule.replace(/\([^)]*\)|（[^）]*）|`[^`]*`/g, '').split(/[。！？!?]|\.\s/).filter((s) => s.trim()).length;
     if (sentences > 2) warnings.push(`${where} has more than 2 sentences; keep only "trigger → required action".`);
 

@@ -44,8 +44,8 @@ When unsure, choose **project** (smaller blast radius) and decide during `harnes
 1. **FAILURES.md** (in the current project root; record global lessons here too, since the incident happened here): add `### F-NNN · YYYY-MM-DD · Title`, numbered one above the current highest, filled in using the entry format in that file.
 2. Write the **rule line** into the ledger chosen in step 2:
    - Project: `- **[YYYY-MM-DD] Title**: rule. (F-NNN)`
-   - Global: `- **[YYYY-MM-DD] Title**: rule. (<tag>: <project folder name> F-NNN)`, where `<tag>` is the source tag the global ledger already uses. Today that is `来源`: the global ledger and the global lint copy `~/.claude/hooks/harness/lint.js` accept only that tag and the heading `# 全局错题集`. This repo's lint also accepts `Source` and `# Global Mishap Ledger`, but use those only once the global lint copy accepts them too.
-   - If the global ledger has no ledger heading yet, add the heading the global lint copy expects at the end of the file and append below it.
+   - Global: `- **[YYYY-MM-DD] Title**: rule. (Source: <project folder name> F-NNN)`
+   - If the global ledger has no `# Global Mishap Ledger` heading yet, add it at the end of the file and append below it.
 3. Run the check: project `node .claude/harness/lint.js`; global add `--global`. If the project has no such script, use the global copy `~/.claude/hooks/harness/lint.js`. Fix the format if it fails.
 
 If the user only asked for an "output / summary" and not for a write, skip step 5 and do only step 6.
@@ -58,8 +58,8 @@ If the user only asked for an "output / summary" and not for a write, skip step 
 **Written to**: <file path> (or "not written, output only")
 
 ```markdown
-- **[YYYY-MM-DD] Title**: rule. (<tag>: <project> F-NNN)
+- **[YYYY-MM-DD] Title**: rule. (Source: <project> F-NNN)
 ```
 ````
 
-Fill in `<tag>` as in step 5. The rule text in the code block must paste directly into `~/.claude/CLAUDE.md` or the project `CLAUDE.md`.
+The rule text in the code block must paste directly into `~/.claude/CLAUDE.md` or the project `CLAUDE.md`.

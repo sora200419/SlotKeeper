@@ -53,3 +53,17 @@ test('global ledger: either heading, and either source tag', () => {
   fs.writeFileSync(file, '# Global\n\n# Global Mishap Ledger\n- **[2026-10-20] Example**: a rule.\n');
   assert.match(lint({ global: true, file }).errors.join('\n'), /has no source/);
 });
+
+test('rule length: 200 characters for Chinese rules, 450 for English ones', () => {
+  const file = path.join(tmp, 'length.md');
+  const check = (rule) => {
+    fs.writeFileSync(file, `# Global\n\n# Global Mishap Ledger\n- **[2026-10-20] Example**: ${rule} (Source: PayPal F-001)\n`);
+    return lint({ global: true, file }).warnings.some((w) => /too long/.test(w));
+  };
+  assert.strictEqual(check(`${'a'.repeat(300)}.`), false);
+  assert.strictEqual(check(`${'a'.repeat(460)}.`), true);
+  assert.strictEqual(check(`${'规'.repeat(190)}。`), true);
+  assert.strictEqual(check(`${'规'.repeat(120)}。`), false);
+  // An English rule that quotes one Chinese word is still an English rule.
+  assert.strictEqual(check(`Do not say "已完成" early ${'a'.repeat(300)}.`), false);
+});
