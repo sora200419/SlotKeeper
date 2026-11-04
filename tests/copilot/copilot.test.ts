@@ -101,6 +101,31 @@ describe('runCopilot', () => {
     expect(listed.bookings).toMatchObject([{ id: b.id, staffId: 'maria', status: 'deposit_held', depositCents: 1000 }]);
   });
 
+  it('never shows the model vault, PayPal customer, order or authorization ids', async () => {
+    const store = createMemoryBookingStore();
+    const b = booking(store);
+    store.save({
+      ...b,
+      hold: {
+        ...b.hold!,
+        paypalOrderId: 'ORDER-SECRET',
+        authorizationId: 'AUTH-SECRET',
+        savedWallet: { vaultId: 'VAULT-SECRET', customerId: 'CUST-SECRET', status: 'VAULTED', savedAt: NOW.toISOString() },
+      },
+    });
+    const { model, requests } = fakeModel(
+      message([toolUse('t1', 'list_bookings', {}), toolUse('t2', 'get_booking', { bookingId: b.id })]),
+      message([text('Done.')], 'end_turn'),
+    );
+    await runCopilot({ model, bookings: store, plans: createMemoryPlanStore(), timeZone: 'UTC' }, 'x', NOW);
+
+    const results = JSON.stringify(requests[1].messages[2].content);
+    // Both tools answered, and told the model a wallet is saved without saying which one.
+    expect(results.match(new RegExp(b.id, 'g'))!.length).toBeGreaterThanOrEqual(2);
+    expect(results).toContain('savedWallet');
+    for (const secret of ['VAULT-SECRET', 'CUST-SECRET', 'ORDER-SECRET', 'AUTH-SECRET']) expect(results).not.toContain(secret);
+  });
+
   it('sends an invalid plan back to the model to fix', async () => {
     const store = createMemoryBookingStore();
     const b = booking(store);

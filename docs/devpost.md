@@ -15,7 +15,7 @@ Every booking, human- or agent-made, backed by a PayPal deposit hold, and an AI 
 
 ### Inspiration
 
-Small appointment businesses (salons, physio studios, tutors, groomers) live on a calendar and lose money when people do not show up. At the same time AI assistants are starting to book appointments on people's behalf, and a business that takes bookings from assistants has no way to know the booking is real. A deposit hold on PayPal answers both: the slot is committed, and nobody is charged unless something happens. We also wanted to see how far an AI can go in a business that moves money, and our answer was: it plans, a person approves, and the code checks everything in between.
+Small appointment businesses (salons, physio studios, tutors, groomers) live on a calendar and lose money when people do not show up. At the same time AI assistants are starting to book appointments on people's behalf, and a business that takes bookings from assistants has no way to know the booking is real. A deposit hold on PayPal answers both: the slot is committed, and nobody is charged unless something happens. We also wanted to see how far an AI can go in a business that moves money, and our answer was: it plans, a person approves, and the code checks everything in between. PayPal's own AI resources page names service businesses that invoice, take payments and manage appointments as a typical use of its AI tools, which is the business we built for.
 
 ### What it does
 
@@ -41,8 +41,9 @@ PayPal is the core of the product, and each capability does a job the business n
 
 The AI parts:
 
-- **Owner copilot:** Claude Haiku 5.5 (configurable) through the Anthropic API, with read-only tools and a `propose_plan` tool. The plan is validated in code, previewed on a Bryntum Scheduler, and executed through the same functions and locks as the staff routes only after approval. The model never receives a tool that moves money.
+- **Owner copilot:** Claude Haiku 5.5 (configurable) through the Anthropic API, with read-only tools and a `propose_plan` tool. The plan is validated in code, previewed on a Bryntum Scheduler, and executed through the same functions and locks as the staff routes only after approval. The model never receives a tool that moves money, and its read tools never show it vault, PayPal customer, order or authorization ids.
 - **MCP booking server:** `search_slots`, `hold_slot`, `create_deposit`, `cancel_booking`, `booking_status` for customers' own assistants, with a per-booking token, rate limits and a 30-minute hold.
+- **Why our own money tools:** PayPal's agent tools reference (read on 2026-11-04) has no tool for authorize, void, reauthorize, Payouts or Vault, and its `pay_order` takes only an order id, with no amount. The copilot's money steps are therefore our own functions over the Server SDK. The same reference says PayPal's remote MCP commerce tools cover gift cards only; our MCP server is the service-booking counterpart.
 
 Stack: Next.js (App Router) and TypeScript, Postgres, Render (Blueprint, web service, database), Bryntum Scheduler, `@paypal/paypal-server-sdk` written with Claude Code and the APIMatic Context Plugin.
 
