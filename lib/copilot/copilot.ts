@@ -93,6 +93,33 @@ function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {
 }
 
 /**
+ * The current date and time in the business time zone, e.g.
+ * "Current time: Wednesday 2026-11-04 21:30 (America/Los_Angeles, UTC-08:00)." Sent with every request
+ * so the model can work out "today" and "tomorrow"; it has no clock of its own. The offset matters:
+ * move_booking takes UTC times, and the model must not guess PST vs PDT.
+ */
+export function currentTimeLine(now: Date, timeZone: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      weekday: 'long',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+      timeZoneName: 'longOffset',
+    })
+      .formatToParts(now)
+      .map((p) => [p.type, p.value]),
+  );
+  // longOffset gives "GMT-08:00", or plain "GMT" at offset zero.
+  const offset = parts.timeZoneName === 'GMT' ? 'UTC+00:00' : String(parts.timeZoneName).replace('GMT', 'UTC');
+  return `Current time: ${parts.weekday} ${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} (${timeZone}, ${offset}).`;
+}
+
+/**
  * One owner request: a tool-use loop where the model reads with read-only tools and ends by calling
  * propose_plan (or by answering a question). A proposed plan is validated and stored as "proposed";
  * nothing that moves money runs here (see approvePlan).
@@ -100,6 +127,8 @@ function textOf(content: Anthropic.Beta.BetaContentBlock[]): string {
 export async function runCopilot(deps: CopilotDeps, request: string, now: Date = new Date()): Promise<CopilotReply> {
   const model = readCopilotModel();
   const messages: Anthropic.Beta.BetaMessageParam[] = [{ role: 'user', content: request }];
+  // Taken once per request, so every turn of this request agrees on what "today" is.
+  const system = `${SYSTEM}\n\n${currentTimeLine(now, deps.timeZone)} Read "today", "tomorrow" and weekdays in this time zone.`;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     let response: Anthropic.Beta.BetaMessage;
@@ -112,7 +141,7 @@ export async function runCopilot(deps: CopilotDeps, request: string, now: Date =
         output_config: { effort: 'medium' },
         // If the model declines, the API re-runs the request on a fallback model it picks (not on Haiku).
         ...(model.fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
-        system: SYSTEM,
+        system,
         tools: COPILOT_TOOLS,
         messages,
       });

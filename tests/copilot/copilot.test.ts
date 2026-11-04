@@ -190,6 +190,49 @@ describe('runCopilot', () => {
   });
 });
 
+describe('the copilot knows the current time', () => {
+  const ask = async (now: Date, timeZone: string) => {
+    const { model, requests } = fakeModel(message([text('ok')], 'end_turn'), message([text('ok')], 'end_turn'));
+    await runCopilot({ model, bookings: createMemoryBookingStore(), plans: createMemoryPlanStore(), timeZone }, 'Who is booked tomorrow?', now);
+    return String(requests[0].system);
+  };
+
+  it('sends the business-time-zone date and time with every request', async () => {
+    // 05:30 UTC on 11-05 is still the evening of 11-04 in Los Angeles.
+    const system = await ask(new Date('2026-11-05T05:30:00.000Z'), 'America/Los_Angeles');
+    expect(system).toContain('Current time: Wednesday 2026-11-04 21:30 (America/Los_Angeles, UTC-08:00).');
+  });
+
+  it('gives the offset in force, on both sides of a daylight-saving change', async () => {
+    // US daylight saving ended 2026-11-01 at 09:00 UTC (02:00 PDT became 01:00 PST).
+    expect(await ask(new Date('2026-11-01T08:30:00.000Z'), 'America/Los_Angeles')).toContain('Sunday 2026-11-01 01:30 (America/Los_Angeles, UTC-07:00)');
+    expect(await ask(new Date('2026-11-01T09:30:00.000Z'), 'America/Los_Angeles')).toContain('Sunday 2026-11-01 01:30 (America/Los_Angeles, UTC-08:00)');
+  });
+
+  it('every turn of one request sends the same time, even after a tool call', async () => {
+    const { model, requests } = fakeModel(message([toolUse('t1', 'list_staff', {})]), message([text('ok')], 'end_turn'));
+    await runCopilot(
+      { model, bookings: createMemoryBookingStore(), plans: createMemoryPlanStore(), timeZone: 'America/Los_Angeles' },
+      'Who is booked tomorrow?',
+      new Date('2026-11-05T05:30:00.000Z'),
+    );
+    expect(requests).toHaveLength(2);
+    expect(requests[1].system).toEqual(requests[0].system);
+    expect(String(requests[1].system)).toContain('2026-11-04 21:30');
+  });
+
+  it('follows the clock: a later request carries the later date', async () => {
+    const before = await ask(new Date('2026-11-05T07:59:00.000Z'), 'America/Los_Angeles');
+    const after = await ask(new Date('2026-11-05T08:01:00.000Z'), 'America/Los_Angeles');
+    expect(before).toContain('Wednesday 2026-11-04 23:59');
+    expect(after).toContain('Thursday 2026-11-05 00:01');
+  });
+
+  it('uses the configured zone, not the server clock zone', async () => {
+    expect(await ask(new Date('2026-11-05T05:30:00.000Z'), 'UTC')).toContain('Thursday 2026-11-05 05:30 (UTC, UTC+00:00)');
+  });
+});
+
 describe('which model the copilot runs on', () => {
   const ask = (model: CopilotModel) =>
     runCopilot({ model, bookings: createMemoryBookingStore(), plans: createMemoryPlanStore(), timeZone: 'UTC' }, 'x', NOW);

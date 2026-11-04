@@ -82,14 +82,15 @@ PayPal/
 - [x] Webpack build for Render memory; follow-redirects security fix; copilot on Haiku 5.5 (10-31)
 - [x] README + Devpost submission copy; agent-tools positioning (11-04)
 - [x] Board money-action buttons with confirmations (11-04, 6306bff); deployed to Render 11-04, storage loaded from Postgres
-- [x] Copilot budget guard: effort `medium`, at most `COPILOT_DAILY_LIMIT` (default 40) requests per rolling 24 h, in memory (11-04); not deployed yet
+- [x] Copilot budget guard: effort `medium`, at most `COPILOT_DAILY_LIMIT` (default 40) requests per rolling 24 h, in memory (11-04); deployed 11-04 (890c4af), first live Haiku answer worked
+- [x] Copilot gets the current date, time and UTC offset in `BUSINESS_TIME_ZONE` with every request (11-04); not deployed yet
 
 **In progress**
 - [ ] Nothing in progress.
 
 **To do (by priority)**
 - [ ] Rotate the PayPal secret and STAFF_API_TOKEN; add ANTHROPIC_API_KEY with a spending cap (Render + `.env.local`)
-- [ ] First real copilot run on Haiku; check the "Persistence Check" booking survived a restart; MCP smoke test with a real client
+- [ ] Live copilot plan → approve → audit log run (a question already works); check the "Persistence Check" booking survived a restart (it is dated 11-02, before today); MCP smoke test with a real client
 - [ ] Decide whether judges get a staff token (docs/devpost.md checklist item 1)
 - [ ] Video (under 3 min), screenshots, one sourced no-show statistic
 - [ ] GitHub About fields (description, website, topics)
@@ -97,7 +98,8 @@ PayPal/
 - [ ] Submit on Devpost by 11-11
 
 **Known issues**
-- The copilot has never run against the real Anthropic API (tests and scripted model only).
+- The copilot has answered one live question; a live plan and approval has not run yet.
+- Locally the copilot uses UTC unless `.env.local` sets `BUSINESS_TIME_ZONE` (Render sets America/Los_Angeles).
 - MCP: not confirmed live that PayPal returns the approval link for an order created with `return=minimal`.
 - Bryntum trial watermark; trial validity through judging: TBC.
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.
