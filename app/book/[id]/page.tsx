@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { DepositCheckout } from '@/components/DepositCheckout';
 import { findService, formatAmount } from '@/lib/booking/catalog';
 import { getBookingStore, type BookingStatus } from '@/lib/booking/store';
+import { formatInZone } from '@/lib/booking/zoned-time';
+import { readBusinessTimeZone } from '@/lib/paypal/payout-deps';
 
 export const dynamic = 'force-dynamic';
 
@@ -22,18 +24,20 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
   if (!booking) notFound();
   const service = findService(booking.serviceId);
   const depositLabel = `${formatAmount(booking.deposit)} ${booking.deposit.currency}`;
+  const timeZone = readBusinessTimeZone();
 
   return (
     <main>
       <h1>{service?.name ?? 'Booking'}</h1>
       <p>
-        {booking.customerName} · {new Date(booking.startsAt).toUTCString()}
+        {booking.customerName} · {formatInZone(booking.startsAt, timeZone)}
       </p>
       {booking.status === 'awaiting_deposit' ? (
         <DepositCheckout
           bookingId={booking.id}
           currency={booking.deposit.currency}
           depositLabel={depositLabel}
+          timeZone={timeZone}
         />
       ) : (
         <p role="status">

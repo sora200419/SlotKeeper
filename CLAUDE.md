@@ -83,7 +83,8 @@ PayPal/
 - [x] README + Devpost submission copy; agent-tools positioning (11-04)
 - [x] Board money-action buttons with confirmations (11-04, 6306bff); deployed to Render 11-04, storage loaded from Postgres
 - [x] Copilot budget guard: effort `medium`, at most `COPILOT_DAILY_LIMIT` (default 40) requests per rolling 24 h, in memory (11-04); deployed 11-04 (890c4af), first live Haiku answer worked
-- [x] Copilot gets the current date, time and UTC offset in `BUSINESS_TIME_ZONE` with every request (11-04); not deployed yet
+- [x] Copilot gets the current date, time and UTC offset in `BUSINESS_TIME_ZONE` with every request (11-04); deployed 11-04 (ee37d25), answers "tomorrow" correctly
+- [x] Booking form reads the typed time as shop time in `BUSINESS_TIME_ZONE`; confirmation and hold expiry shown in shop time (11-04); not deployed yet
 
 **In progress**
 - [ ] Nothing in progress.
@@ -99,7 +100,8 @@ PayPal/
 
 **Known issues**
 - The copilot has answered one live question; a live plan and approval has not run yet.
-- Locally the copilot uses UTC unless `.env.local` sets `BUSINESS_TIME_ZONE` (Render sets America/Los_Angeles).
+- Locally the copilot and booking form use UTC unless `.env.local` sets `BUSINESS_TIME_ZONE` (Render sets America/Los_Angeles).
+- POST /api/bookings (the /book form) does not check opening hours (9:00-18:00); only MCP slot search does. Test bookings at 18:00 and 19:00 PT exist.
 - MCP: not confirmed live that PayPal returns the approval link for an order created with `return=minimal`.
 - Bryntum trial watermark; trial validity through judging: TBC.
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.

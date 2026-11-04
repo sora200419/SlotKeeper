@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { formatInZone } from '@/lib/booking/zoned-time';
 
 type Phase =
   | { kind: 'loading' }
@@ -13,6 +14,8 @@ interface Props {
   bookingId: string;
   currency: string;
   depositLabel: string;
+  /** Business time zone: the hold's expiry is shown in shop time, like the booking time. */
+  timeZone: string;
 }
 
 async function postJson<T>(url: string, body?: unknown): Promise<T> {
@@ -50,7 +53,7 @@ interface HeldBooking {
 }
 
 /** PayPal JS SDK v6 button that places a deposit hold (Orders v2 AUTHORIZE) for one booking. */
-export function DepositCheckout({ bookingId, currency, depositLabel }: Props) {
+export function DepositCheckout({ bookingId, currency, depositLabel, timeZone }: Props) {
   const [phase, setPhase] = useState<Phase>({ kind: 'loading' });
   // Opt-in: save the customer's PayPal wallet so later deposits and no-show fees need no popup.
   const [savePayment, setSavePayment] = useState(false);
@@ -179,7 +182,7 @@ export function DepositCheckout({ bookingId, currency, depositLabel }: Props) {
       {phase.kind === 'held' && (
         <p role="status">
           Deposit held. Authorization <code>{phase.authorizationId}</code>
-          {phase.expiresAt ? `, valid until ${new Date(phase.expiresAt).toLocaleString()}` : ''}.
+          {phase.expiresAt ? `, valid until ${formatInZone(phase.expiresAt, timeZone)}` : ''}.
         </p>
       )}
       {phase.kind === 'error' && (

@@ -2,21 +2,27 @@
 
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
+import { newBookingBody } from '@/lib/booking/zoned-time';
 
 interface ServiceOption {
   id: string;
   label: string;
 }
 
-/** Default slot: tomorrow at 10:00 local time (inside the 3-day deposit window). */
-function defaultSlot(): string {
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T10:00`;
-}
-
-export function NewBookingForm({ services }: { services: ServiceOption[] }) {
+/**
+ * The time field is read in the business time zone (`timeZone`), not the visitor's browser zone, so
+ * "10:00" means 10:00 at the shop wherever the customer is. `defaultStartsAt` comes from the server,
+ * so server and browser render the same value.
+ */
+export function NewBookingForm({
+  services,
+  timeZone,
+  defaultStartsAt,
+}: {
+  services: ServiceOption[];
+  timeZone: string;
+  defaultStartsAt: string;
+}) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -30,11 +36,9 @@ export function NewBookingForm({ services }: { services: ServiceOption[] }) {
       const response = await fetch('/api/bookings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceId: form.get('serviceId'),
-          customerName: form.get('customerName'),
-          startsAt: new Date(String(form.get('startsAt'))).toISOString(),
-        }),
+        body: JSON.stringify(
+          newBookingBody({ serviceId: form.get('serviceId'), customerName: form.get('customerName'), startsAt: form.get('startsAt') }, timeZone),
+        ),
       });
       const data = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
       if (!response.ok || !data.id) {
@@ -63,8 +67,9 @@ export function NewBookingForm({ services }: { services: ServiceOption[] }) {
         Your name <input name="customerName" required maxLength={80} />
       </label>
       <label>
-        Time <input name="startsAt" type="datetime-local" required defaultValue={defaultSlot()} />
+        Time <input name="startsAt" type="datetime-local" required defaultValue={defaultStartsAt} />
       </label>
+      <small>Times are shop time: {timeZone}.</small>
       <button type="submit" disabled={submitting}>
         {submitting ? 'Booking…' : 'Book and hold deposit'}
       </button>
