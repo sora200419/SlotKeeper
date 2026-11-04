@@ -9,7 +9,7 @@ const auth = { Authorization: `Bearer ${TOKEN}` };
 const params = (id: string) => ({ params: Promise.resolve({ id }) });
 
 beforeEach(() => {
-  for (const key of ['__slotkeeperPlans', '__slotkeeperAudit', '__slotkeeperBookings']) {
+  for (const key of ['__slotkeeperPlans', '__slotkeeperAudit', '__slotkeeperBookings', '__slotkeeperCopilotGate']) {
     (globalThis as Record<string, unknown>)[key] = undefined;
   }
   vi.spyOn(console, 'error').mockImplementation(() => {});

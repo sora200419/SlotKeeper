@@ -83,7 +83,7 @@ describe('runCopilot', () => {
     expect(requests[0]).toMatchObject({
       model: 'claude-haiku-5-5',
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'high' },
+      output_config: { effort: 'medium' },
     });
     expect(requests[0]).not.toHaveProperty('fallbacks');
     expect(requests[0]).not.toHaveProperty('betas');

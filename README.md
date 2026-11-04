@@ -142,6 +142,7 @@ It needs Node 22.15 or later, reads `.env.local`, and refuses to run against pro
 | `DATABASE_URL` | recommended | Postgres. Without it data stays in memory and is lost on restart |
 | `ANTHROPIC_API_KEY` | for the copilot | Server-side key; without it only the copilot is disabled |
 | `COPILOT_MODEL` | no | `claude-haiku-5-5` (default), `claude-sonnet-5-5` or `claude-opus-5-5` |
+| `COPILOT_DAILY_LIMIT` | no | Copilot requests per rolling 24 hours, 1 to 1000 (default 40). Kept in memory, so a restart starts the count again |
 | `STAFF_PAYOUT_EMAILS` | for payouts | `maria=<email>,ken=<email>` (sandbox personal accounts) |
 | `BUSINESS_TIME_ZONE` | no | IANA zone that decides the business day (default `UTC`; Render sets `America/Los_Angeles`) |
 | `APP_URL` | when deployed | Public URL for PayPal return and cancel links |

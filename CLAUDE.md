@@ -82,6 +82,7 @@ PayPal/
 - [x] Webpack build for Render memory; follow-redirects security fix; copilot on Haiku 5.5 (10-31)
 - [x] README + Devpost submission copy; agent-tools positioning (11-04)
 - [x] Board money-action buttons with confirmations (11-04, 6306bff); deployed to Render 11-04, storage loaded from Postgres
+- [x] Copilot budget guard: effort `medium`, at most `COPILOT_DAILY_LIMIT` (default 40) requests per rolling 24 h, in memory (11-04); not deployed yet
 
 **In progress**
 - [ ] Nothing in progress.

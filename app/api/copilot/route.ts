@@ -4,6 +4,7 @@ import { requireStaff } from '@/lib/api/staff';
 import { BookingInputError } from '@/lib/booking/bookings';
 import { getBookingStore } from '@/lib/booking/store';
 import { createCopilotModel, runCopilot } from '@/lib/copilot/copilot';
+import { takeCopilotRequest } from '@/lib/copilot/limit';
 import { getPlanStore } from '@/lib/copilot/plan';
 import { readBusinessTimeZone } from '@/lib/paypal/payout-deps';
 
@@ -22,10 +23,10 @@ export async function POST(request: Request) {
     if (typeof body.message !== 'string' || !body.message.trim() || body.message.length > 2000) {
       throw new BookingInputError('message must be 1-2000 characters.');
     }
-    const result = await runCopilot(
-      { model: createCopilotModel(), bookings: getBookingStore(), plans: getPlanStore(), timeZone: readBusinessTimeZone() },
-      body.message.trim(),
-    );
+    // Built first, so a missing API key is reported without using up a request from the daily cap.
+    const deps = { model: createCopilotModel(), bookings: getBookingStore(), plans: getPlanStore(), timeZone: readBusinessTimeZone() };
+    takeCopilotRequest();
+    const result = await runCopilot(deps, body.message.trim());
     return NextResponse.json(result);
   } catch (err) {
     return errorResponse(err);

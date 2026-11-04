@@ -33,7 +33,7 @@ const MAX_TURNS = 8;
 
 export class CopilotError extends Error {
   constructor(
-    readonly code: 'missing_config' | 'model_error' | 'model_refused' | 'no_plan',
+    readonly code: 'missing_config' | 'model_error' | 'model_refused' | 'no_plan' | 'rate_limited',
     readonly httpStatus: number,
     message: string,
   ) {
@@ -108,8 +108,8 @@ export async function runCopilot(deps: CopilotDeps, request: string, now: Date =
         model: model.id,
         max_tokens: 16000,
         thinking: { type: 'adaptive' },
-        // Planning money moves: think it through. These models default to medium.
-        output_config: { effort: 'high' },
+        // Medium keeps the AI budget small: the plan is checked in code and the owner approves it before anything runs.
+        output_config: { effort: 'medium' },
         // If the model declines, the API re-runs the request on a fallback model it picks (not on Haiku).
         ...(model.fallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
         system: SYSTEM,
