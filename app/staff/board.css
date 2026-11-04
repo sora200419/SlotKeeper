@@ -381,6 +381,106 @@
   gap: 0.4rem;
 }
 
+.sk-booking {
+  padding: 0.85rem;
+  font-size: 0.9rem;
+}
+
+.sk-booking h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.sk-booking header p {
+  margin: 0.25rem 0 0;
+  color: var(--sk-muted);
+}
+
+.sk-booking header .sk-key {
+  display: inline-block;
+  margin-top: 0.45rem;
+}
+
+.sk-tag {
+  margin-left: 0.4rem;
+  padding: 0 0.3rem;
+  border-radius: 3px;
+  background: var(--sk-ink);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.sk-booking dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0.8rem 0;
+}
+
+.sk-booking dt {
+  color: var(--sk-muted);
+}
+
+.sk-booking dd {
+  margin: 0;
+}
+
+.sk-note {
+  margin: 0.5rem 0;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  background: var(--sk-review-bg);
+  color: var(--sk-review-fg);
+  font-size: 0.85rem;
+}
+
+.sk-wrap {
+  flex-wrap: wrap;
+}
+
+.sk-board .sk-actions button[aria-pressed='true'] {
+  outline: 2px solid var(--sk-ink);
+  outline-offset: 1px;
+}
+
+.sk-confirm {
+  margin-top: 0.75rem;
+  padding: 0.7rem;
+  border: 1px solid var(--sk-line);
+  border-left: 3px solid var(--sk-accent);
+  border-radius: 6px;
+}
+
+.sk-confirm p {
+  margin: 0 0 0.5rem;
+}
+
+.sk-confirm label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.sk-confirm input {
+  font: inherit;
+  padding: 0.4rem;
+  border: 1px solid var(--sk-line);
+  border-radius: 6px;
+}
+
+.sk-confirm input[aria-invalid='true'] {
+  border-color: var(--sk-danger);
+}
+
+.sk-done {
+  margin: 0.6rem 0 0;
+  color: #17803d;
+  font-weight: 600;
+}
+
 .sk-audit {
   margin: 0;
   padding: 0;

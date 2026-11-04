@@ -115,7 +115,8 @@ describe('POST /api/bookings/[id]/wallet/charge', () => {
   });
 
   it('charges the saved wallet and returns the booking with the charge', async () => {
-    const booking = walletBooking();
+    const booking = { ...walletBooking(), accessTokenHash: 'a'.repeat(64) };
+    getBookingStore().save(booking);
     createOrder.mockResolvedValue({
       result: {
         id: 'ORDER-W1',
@@ -127,7 +128,9 @@ describe('POST /api/bookings/[id]/wallet/charge', () => {
     });
     const res = await charge(booking.id, { amountCents: 400 });
     expect(res.status).toBe(200);
-    expect(await res.json()).toMatchObject({ hold: { walletCharges: [{ captureId: 'CAP-W1', amountCents: 400 }] } });
+    const body = await res.json();
+    expect(body).toMatchObject({ hold: { walletCharges: [{ captureId: 'CAP-W1', amountCents: 400 }] } });
+    expect(body).not.toHaveProperty('accessTokenHash');
     expect(createOrder.mock.calls[0][0].body.paymentSource.paypal.vaultId).toBe('VAULT-1');
   });
 

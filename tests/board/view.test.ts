@@ -1,7 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import {
+  actionRequest,
   addDays,
   applyLiveMessage,
+  bookingActions,
+  centsToInput,
+  parseDollars,
+  PANEL_START,
+  panelReducer,
+  panelView,
+  replayExpired,
+  walletSummary,
+  type BoardAction,
+  type PanelEvent,
   boardEvents,
   boardResources,
   bookingEvent,
@@ -192,6 +203,191 @@ describe('keeping a plan on screen', () => {
     expect(dayHours([at('2026-11-05T14:30:00.000Z')], '2026-11-05', zone)).toEqual({ open: 6, close: 20 });
     expect(dayHours([at('2026-11-06T04:30:00.000Z')], '2026-11-05', zone)).toEqual({ open: 8, close: 22 });
     expect(dayHours([at('2026-11-06T07:45:00.000Z')], '2026-11-05', zone)).toEqual({ open: 8, close: 24 });
+  });
+});
+
+describe('bookingActions mirror what the payment layer allows', () => {
+  const held = (extra: Partial<BoardBooking> = {}) => booking('b', { hold: { authorizationId: 'AUTH-1' }, ...extra });
+  const kinds = (b: BoardBooking) => bookingActions(b).map((a) => a.kind);
+
+  it('a held deposit can be captured, charged as a no-show fee up to the deposit, or released', () => {
+    expect(bookingActions(held())).toEqual([{ kind: 'capture', cents: 1000 }, { kind: 'no_show', maxCents: 1000 }, { kind: 'void' }]);
+  });
+
+  it('nothing to do without a hold, or once the money is settled', () => {
+    expect(kinds(booking('b', { status: 'awaiting_deposit' }))).toEqual([]);
+    expect(kinds(booking('b', { status: 'cancelled' }))).toEqual([]);
+    expect(kinds(held({ status: 'cancelled' }))).toEqual([]);
+    expect(kinds(held({ status: 'refunded', hold: { authorizationId: 'A', capture: { amountCents: 1000 }, refunds: [{ amountCents: 1000 }] } }))).toEqual([]);
+  });
+
+  it('a hold PayPal is still reviewing can only be released', () => {
+    expect(kinds(held({ status: 'deposit_pending' }))).toEqual(['void']);
+  });
+
+  it('a booking under review: release if nothing was captured, otherwise leave it to staff', () => {
+    expect(kinds(held({ status: 'deposit_needs_review' }))).toEqual(['void']);
+    expect(kinds(held({ status: 'deposit_needs_review', hold: { authorizationId: 'A', capture: { amountCents: 400 } } }))).toEqual([]);
+  });
+
+  it('refunds what is still refundable, ignoring failed refunds', () => {
+    const b = held({ status: 'partially_refunded', hold: { authorizationId: 'A', capture: { amountCents: 1000 }, refunds: [{ amountCents: 300 }, { amountCents: 500, status: 'FAILED' }] } });
+    expect(bookingActions(b)).toEqual([{ kind: 'refund', maxCents: 700 }]);
+  });
+
+  it('a saved wallet is charged once, only after completed or no-show, never past the deposit', () => {
+    const noShow = (hold: Partial<NonNullable<BoardBooking['hold']>>) =>
+      held({ status: 'no_show_charged', hold: { authorizationId: 'A', capture: { amountCents: 400 }, ...hold } });
+    expect(bookingActions(noShow({ savedWallet: { status: 'VAULTED' } }))).toEqual([{ kind: 'refund', maxCents: 400 }, { kind: 'wallet', maxCents: 600 }]);
+    expect(kinds(noShow({}))).toEqual(['refund']);
+    expect(kinds(noShow({ savedWallet: {}, walletCharges: [{ amountCents: 600, status: 'COMPLETED' }] }))).toEqual(['refund']);
+    expect(kinds(noShow({ savedWallet: {}, walletCharges: [{ amountCents: 600, status: 'DECLINED' }] }))).toEqual(['refund', 'wallet']);
+    expect(kinds(held({ status: 'completed', hold: { authorizationId: 'A', capture: { amountCents: 1000 }, savedWallet: {} } }))).toEqual(['refund']);
+    expect(kinds(held({ status: 'partially_refunded', hold: { authorizationId: 'A', capture: { amountCents: 400 }, refunds: [{ amountCents: 100 }], savedWallet: {} } }))).toEqual(['refund']);
+  });
+
+  it('an unconfirmed call allows only its own replay', () => {
+    expect(bookingActions(held({ hold: { authorizationId: 'A', pendingAction: { kind: 'capture', reason: 'no_show' } } }))).toEqual([
+      { kind: 'retry', pending: 'capture', reason: 'no_show' },
+    ]);
+  });
+
+  it('offers no retry once PayPal has forgotten the request id', () => {
+    const now = new Date('2026-11-04T12:00:00Z');
+    const since = (hours: number) => new Date(now.getTime() - hours * 60 * 60 * 1000).toISOString();
+    const pending = (kind: string, hours: number) => held({ hold: { authorizationId: 'A', pendingAction: { kind, since: since(hours) } } });
+    expect(bookingActions(pending('wallet_charge', 4), now).map((a) => a.kind)).toEqual(['retry']);
+    expect(bookingActions(pending('wallet_charge', 6), now)).toEqual([]);
+    expect(bookingActions(pending('refund', 43 * 24), now).map((a) => a.kind)).toEqual(['retry']);
+    expect(bookingActions(pending('refund', 45 * 24), now)).toEqual([]);
+    expect(replayExpired(pending('refund', 45 * 24), now)).toBe(true);
+    expect(replayExpired(pending('refund', 1), now)).toBe(false);
+  });
+});
+
+describe('walletSummary', () => {
+  const charge = (amountCents: number, status: string) => ({ amountCents, status });
+  it('never calls a declined or failed charge "charged"', () => {
+    expect(walletSummary({ savedWallet: {}, walletCharges: [charge(600, 'DECLINED')] })).toBe('not charged (last try declined)');
+    expect(walletSummary({ savedWallet: {}, walletCharges: [charge(600, 'FAILED')] })).toBe('not charged (last try failed)');
+  });
+
+  it('adds up money actually taken, and says when PayPal has not settled it', () => {
+    expect(walletSummary({ savedWallet: {}, walletCharges: [charge(600, 'DECLINED'), charge(500, 'COMPLETED')] })).toBe('charged $5.00');
+    expect(walletSummary({ savedWallet: {}, walletCharges: [charge(500, 'PENDING')] })).toBe('charged $5.00 (pending)');
+  });
+
+  it('nothing to show without a saved wallet', () => {
+    expect(walletSummary({ savedWallet: {} })).toBe('yes, not charged');
+    expect(walletSummary({})).toBeUndefined();
+    expect(walletSummary(undefined)).toBeUndefined();
+  });
+});
+
+describe('booking panel state', () => {
+  const NOW = new Date('2026-11-04T12:00:00Z');
+  const held = (id: string, extra: Partial<BoardBooking> = {}) => booking(id, { hold: { authorizationId: 'AUTH-1' }, ...extra });
+  const run = (...events: PanelEvent[]) => events.reduce(panelReducer, PANEL_START);
+  const noShow: BoardAction = { kind: 'no_show', maxCents: 1000 };
+
+  it('shows a result only on the booking it belongs to, even after switching mid-request', () => {
+    const a = held('a');
+    const b = held('b');
+    // Start A's request, switch to B and choose there, then A's answer arrives.
+    const state = run(
+      { type: 'choose', bookingId: 'a', action: noShow },
+      { type: 'start', bookingId: 'a' },
+      { type: 'choose', bookingId: 'b', action: { kind: 'void' } },
+      { type: 'finish', bookingId: 'a', ok: true, text: 'Done. No-show fee.' },
+    );
+    const onB = panelView(state, b, NOW);
+    expect(onB.message).toBeUndefined();
+    expect(onB.sending).toBe(false);
+    expect(onB.chosen).toEqual({ kind: 'void' });
+    const onA = panelView(state, a, NOW);
+    expect(onA.message).toEqual({ kind: 'done', text: 'Done. No-show fee.' });
+    expect(onA.chosen).toBeUndefined();
+  });
+
+  it('a request in flight disables only its own booking', () => {
+    const state = run({ type: 'start', bookingId: 'a' });
+    expect(panelView(state, held('a'), NOW).sending).toBe(true);
+    expect(panelView(state, held('b'), NOW).sending).toBe(false);
+  });
+
+  it('keeps the choice open after an error, and clears it after success', () => {
+    const failed = run({ type: 'choose', bookingId: 'a', action: noShow }, { type: 'start', bookingId: 'a' }, { type: 'finish', bookingId: 'a', ok: false, text: 'Declined' });
+    expect(panelView(failed, held('a'), NOW)).toMatchObject({ chosen: noShow, message: { kind: 'error', text: 'Declined' } });
+  });
+
+  it('drops a choice the booking no longer allows, and checks amounts against its current limit', () => {
+    const chosen = run({ type: 'choose', bookingId: 'a', action: noShow }, { type: 'amount', value: '8' });
+    // Captured meanwhile (webhook or copilot): no-show is no longer offered.
+    expect(panelView(chosen, held('a', { status: 'completed', hold: { authorizationId: 'A', capture: { amountCents: 1000 } } }), NOW).chosen).toBeUndefined();
+
+    const refund = run({ type: 'choose', bookingId: 'a', action: { kind: 'refund', maxCents: 1000 } }, { type: 'amount', value: '8' });
+    const partly = held('a', { status: 'partially_refunded', hold: { authorizationId: 'A', capture: { amountCents: 1000 }, refunds: [{ amountCents: 500 }] } });
+    const view = panelView(refund, partly, NOW);
+    expect(view.chosen).toEqual({ kind: 'refund', maxCents: 500 });
+    expect(view.parsed).toEqual({ ok: false, message: 'The amount can be at most $5.00.' });
+  });
+
+  it('fills the amount with the most the action allows', () => {
+    expect(panelView(run({ type: 'choose', bookingId: 'a', action: noShow }), held('a'), NOW).amount).toBe('10.00');
+  });
+});
+
+describe('actionRequest', () => {
+  it.each([
+    [{ kind: 'capture', cents: 1000 }, undefined, '/deposit/capture', { reason: 'completed' }],
+    [{ kind: 'no_show', maxCents: 1000 }, 400, '/deposit/capture', { reason: 'no_show', amountCents: 400 }],
+    [{ kind: 'void' }, undefined, '/deposit/void', undefined],
+    [{ kind: 'refund', maxCents: 1000 }, 250, '/deposit/refund', { amountCents: 250 }],
+    [{ kind: 'wallet', maxCents: 600 }, 600, '/wallet/charge', { amountCents: 600 }],
+    [{ kind: 'retry', pending: 'capture', reason: 'no_show' }, undefined, '/deposit/capture', { reason: 'no_show' }],
+    [{ kind: 'retry', pending: 'refund' }, undefined, '/deposit/refund', {}],
+    [{ kind: 'retry', pending: 'reauthorize' }, undefined, '/deposit/reauthorize', undefined],
+    [{ kind: 'retry', pending: 'wallet_charge' }, undefined, '/wallet/charge', {}],
+  ] as Array<[BoardAction, number | undefined, string, unknown]>)('%j', (action, cents, path, body) => {
+    expect(actionRequest(action, 'b 1', cents)).toEqual({ path: `/api/bookings/b%201${path}`, ...(body === undefined ? {} : { body }) });
+  });
+});
+
+describe('parseDollars', () => {
+  it.each([
+    ['4', 400],
+    ['4.5', 450],
+    ['4.50', 450],
+    ['4,50', 450],
+    ['$4.50', 450],
+    ['  10 USD ', 1000],
+    ['0.01', 1],
+    ['1,234.50', 123450],
+    ['1.234,50', 123450],
+  ])('%s -> %i cents', (input, cents) => {
+    expect(parseDollars(input, 1_000_000)).toEqual({ ok: true, cents });
+  });
+
+  it.each(['4,500', '1.234', '1,234,567'])('refuses the ambiguous %s rather than guessing', (input) => {
+    expect(parseDollars(input, 1_000_000)).toMatchObject({ ok: false, message: expect.stringContaining('two different amounts') });
+  });
+
+  it.each(['', 'abc', '4.567', '4..5', '-4', '4.5.6', '1,23.50', '0', '0.00'])('refuses %j', (input) => {
+    expect(parseDollars(input, 1_000_000).ok).toBe(false);
+  });
+
+  it('refuses more than the limit and says what the limit is', () => {
+    expect(parseDollars('10.01', 1000)).toEqual({ ok: false, message: 'The amount can be at most $10.00.' });
+    expect(parseDollars('10', 1000)).toEqual({ ok: true, cents: 1000 });
+  });
+
+  it('calls a huge amount too large, not too small', () => {
+    expect(parseDollars('99999999999999999999', 1000)).toEqual({ ok: false, message: 'The amount can be at most $10.00.' });
+  });
+
+  it('shows cents back as an amount the parser accepts', () => {
+    expect(centsToInput(400)).toBe('4.00');
+    expect(parseDollars(centsToInput(1234), 2000)).toEqual({ ok: true, cents: 1234 });
   });
 });
 

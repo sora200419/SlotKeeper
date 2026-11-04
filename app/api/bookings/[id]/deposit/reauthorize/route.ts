@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { errorResponse } from '@/lib/api/responses';
+import { errorResponse, staffBooking } from '@/lib/api/responses';
 import { requireStaff } from '@/lib/api/staff';
 import { getBookingStore } from '@/lib/booking/store';
 import { getPaymentsController } from '@/lib/paypal/client';
@@ -13,7 +13,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     requireStaff(request);
     const booking = await reauthorizeDeposit(getPaymentsController(), getBookingStore(), id);
-    return NextResponse.json(booking);
+    return NextResponse.json(staffBooking(booking));
   } catch (err) {
     return errorResponse(err);
   }

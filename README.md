@@ -10,7 +10,7 @@ money action is audited.
 ## What it does
 
 - **Deposit holds.** A customer books a slot and PayPal holds a deposit on their account (Orders v2 `AUTHORIZE`, JS SDK v6). Nothing is charged yet.
-- **Money actions for the owner.** Capture the whole deposit when the service happened, charge a no-show fee (partial capture, the rest of the hold is released), void the hold, reauthorize it, or refund.
+- **Money actions for the owner.** Capture the whole deposit when the service happened, charge a no-show fee (partial capture, the rest of the hold is released), void the hold, or refund, from buttons on the staff board that each ask for confirmation. Reauthorizing a hold is an API route and a copilot step.
 - **Live staff board.** A Bryntum Scheduler day view coloured by deposit state; PayPal webhooks and staff actions update it live.
 - **Owner copilot.** The owner types what changed ("Maria is sick tomorrow, move her clients to Ken"). Claude reads the bookings with read-only tools and proposes a plan. The plan is previewed on the schedule, checked in code, and runs only after the owner approves. Every step is written to an audit log with its PayPal ids.
 - **Bookings by customers' AI assistants.** An MCP server (`/api/mcp`) lets an assistant search slots, hold one and get a PayPal approval link. The customer approves the deposit in PayPal themselves; the assistant never moves money.
@@ -78,7 +78,7 @@ You need a **PayPal sandbox personal account** (your own, from developer.paypal.
 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the **Your name** field (bookings are shared and shown on the staff board) and choose a time within 3 days.
 2. Click **Book and hold deposit**, then pay with the PayPal button using your sandbox personal account. The page then shows "Deposit held" with the PayPal authorization id.
 3. The staff screens need a token (`STAFF_API_TOKEN`), given in the Devpost "Testing instructions". Open `/staff`, enter it, and your booking is on the board, coloured "Deposit held".
-4. Staff money actions are API routes (`Authorization: Bearer <token>`):
+4. Click your booking on the board. The **Booking** tab shows its deposit and only the money actions that deposit allows right now: **Capture $…** (the whole deposit), **Charge no-show fee** (any amount up to the deposit; the rest of the hold is released), **Release hold**, then **Refund**, and **Charge saved wallet** once the booking is completed or charged a no-show fee, if the customer saved their wallet and part of the deposit was not captured. Each asks for confirmation first. The same actions are API routes (`Authorization: Bearer <token>`) for scripts:
    ```bash
    # whole deposit, service happened
    curl -X POST https://slotkeeper-93dy.onrender.com/api/bookings/<id>/deposit/capture -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"reason":"completed"}'
@@ -87,7 +87,7 @@ You need a **PayPal sandbox personal account** (your own, from developer.paypal.
    # release the hold, or refund what was captured
    curl -X POST .../deposit/void ... ;  curl -X POST .../deposit/refund ... -d '{}'
    ```
-   Each result shows up on the board by itself (PayPal webhook → live feed).
+   The board shows the result at once, and again when PayPal's webhook confirms it.
 5. In the copilot panel on `/staff`, describe a change, for example "Cancel Ana's booking and release her deposit". The copilot proposes a plan that is previewed on the schedule; **Approve and run** executes it and the **Audit log** tab lists each step with its PayPal ids.
 6. MCP: point an MCP client at `https://slotkeeper-93dy.onrender.com/api/mcp` (Streamable HTTP, no authentication; each booking has its own token). Tools: `search_slots`, `hold_slot`, `create_deposit`, `cancel_booking`, `booking_status`.
 
@@ -186,6 +186,7 @@ unnoticed. So the first deploy with a database, or a rollback to such a release,
 (trial package, so it shows a watermark). Open it with the staff token.
 
 - Bookings are coloured by deposit state and update live over Server-Sent Events, from PayPal webhooks as well as staff actions.
+- Clicking a booking opens the **Booking** tab: its deposit, and buttons for only the money actions that deposit allows right now. Each one asks for confirmation; amounts accept `4.50` or `4,50` and refuse ambiguous input such as `4,500`.
 - The copilot panel previews a plan on the schedule before anything runs: a dashed ghost at the destination, a faded original, and a note for each money step. Nothing moves until the owner approves.
 - The audit log lists every action the copilot ran, with its PayPal ids.
 

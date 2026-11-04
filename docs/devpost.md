@@ -20,7 +20,7 @@ Small appointment businesses (salons, physio studios, tutors, groomers) live on 
 ### What it does
 
 - A customer books a slot and PayPal holds a deposit on their account. Nothing is charged yet.
-- The owner can capture the deposit when the service happened, charge a no-show fee (a partial capture, and the rest of the hold is released), void the hold, reauthorize it, or refund.
+- The owner can capture the deposit when the service happened, charge a no-show fee (a partial capture, and the rest of the hold is released), void the hold, or refund, by clicking the booking on the board; each action asks for confirmation. Reauthorizing a hold is an API route and a copilot step.
 - The owner's day is a live board, coloured by deposit state. PayPal webhooks and staff actions update it as they happen.
 - The owner types what changed ("Maria is sick tomorrow, move her clients to Ken"). Claude reads the bookings with read-only tools and proposes a plan. The plan is previewed on the schedule before anything runs, checked in code, and executed only after the owner approves. Each step is written to an audit log with its PayPal ids.
 - A customer's AI assistant can book through our MCP server. It reserves a slot and gets a PayPal approval link; the customer approves the deposit in PayPal. The assistant never moves money.
@@ -66,7 +66,6 @@ Putting an AI next to money is mostly a question of what the AI is allowed to be
 
 ### What's next
 
-- Buttons for capture, no-show fee, void and refund on the board (today they are API routes plus the copilot).
 - Invoicing for the balance and tips, with the tip counted only once it is actually received.
 - A waitlist that fills a freed slot and collects its deposit.
 - Row-level database locks so the app can run on more than one instance.
@@ -97,7 +96,7 @@ Paste this into the Devpost testing field. It repeats the README's "Try it (for 
 > 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the "Your name" field and choose a time within the next 3 days (PayPal holds an authorization for 3 days). The time box uses your browser's local time; the confirmation page shows UTC.
 > 2. Click "Book and hold deposit" and pay with the PayPal button using your sandbox personal account. The page shows "Deposit held" and the PayPal authorization id.
 > 3. Staff screens need a token: **[STAFF TOKEN, or say how to get one]**. Open https://slotkeeper-93dy.onrender.com/staff, enter it, and your booking is on the board.
-> 4. Staff money actions are API routes with `Authorization: Bearer <token>`, for example `POST /api/bookings/<id>/deposit/capture` with `{"reason":"completed"}`, or `{"reason":"no_show","amountCents":400}` for a no-show fee; also `/deposit/void` and `/deposit/refund`. The board updates by itself when PayPal's webhook arrives. Full examples: README, "Try it (for judges)".
+> 4. Click your booking on the board. The "Booking" tab shows its deposit and only the actions it allows right now: "Capture $…" (the whole deposit), "Charge no-show fee" (any amount up to the deposit; the rest of the hold is released), "Release hold", and afterwards "Refund". Each asks for confirmation. The board shows the result at once and again when PayPal's webhook confirms it. The same actions are API routes; see the README, "Try it (for judges)".
 > 5. In the copilot panel on /staff, describe a change, such as "Cancel Ana's booking and release her deposit". Review the plan previewed on the schedule, press "Approve and run", then open the "Audit log" tab. **[Only if the copilot has an API key and budget during judging.]**
 > 6. MCP: connect an MCP client to https://slotkeeper-93dy.onrender.com/api/mcp (Streamable HTTP) and use `search_slots`, `hold_slot`, `create_deposit`.
 

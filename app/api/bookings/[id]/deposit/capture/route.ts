@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { errorResponse, readJsonObject } from '@/lib/api/responses';
+import { errorResponse, readJsonObject, staffBooking } from '@/lib/api/responses';
 import { requireStaff } from '@/lib/api/staff';
 import { BookingInputError } from '@/lib/booking/bookings';
 import { getBookingStore } from '@/lib/booking/store';
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       reason: body.reason,
       amountCents: body.amountCents,
     });
-    return NextResponse.json(booking);
+    return NextResponse.json(staffBooking(booking));
   } catch (err) {
     return errorResponse(err);
   }

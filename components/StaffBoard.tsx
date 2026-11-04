@@ -12,10 +12,13 @@ import {
   LEGEND,
   nextBookedDay,
   planDay,
+  upsertBooking,
   type AuditEntry,
+  type BoardBooking,
   type BoardData,
   type Plan,
 } from '@/lib/board/view';
+import { BookingPanel } from './BookingPanel';
 import { BookingScheduler } from './BookingScheduler';
 import { AuditList, CopilotPanel } from './CopilotPanel';
 
@@ -51,7 +54,8 @@ export function StaffBoard() {
   const [day, setDay] = useState('');
   const [plan, setPlan] = useState<Plan | undefined>();
   const [audit, setAudit] = useState<AuditEntry[]>([]);
-  const [tab, setTab] = useState<'copilot' | 'audit'>('copilot');
+  const [tab, setTab] = useState<'booking' | 'copilot' | 'audit'>('copilot');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [live, setLive] = useState<Live>('connecting');
   const dayRef = useRef(day);
   dayRef.current = day;
@@ -143,7 +147,17 @@ export function StaffBoard() {
     [loadAudit, data],
   );
 
+  const selectBooking = useCallback((id: string) => {
+    setSelectedId(id);
+    setTab('booking');
+  }, []);
+
+  const handleBooking = useCallback((booking: BoardBooking) => {
+    setData((current) => (current ? { ...current, bookings: upsertBooking(current.bookings, booking) } : current));
+  }, []);
+
   const events = useMemo(() => (data ? boardEvents(data.bookings, data.services, plan) : []), [data, plan]);
+  const selected = data?.bookings.find((b) => b.id === selectedId);
   const resources = useMemo(() => (data ? boardResources(data.staff, events) : []), [data, events]);
   const hours = useMemo(() => (data && day ? dayHours(events, day, data.timeZone) : { open: 8, close: 20 }), [data, day, events]);
   const nextDay = data && day ? nextBookedDay(data.bookings, day, data.timeZone) : undefined;
@@ -203,7 +217,7 @@ export function StaffBoard() {
       <main className="sk-main">
         <div className="sk-schedule">
           {data && day ? (
-            <BookingScheduler staff={resources} events={events} day={day} hours={hours} timeZone={data.timeZone} />
+            <BookingScheduler staff={resources} events={events} day={day} hours={hours} timeZone={data.timeZone} onSelect={selectBooking} />
           ) : (
             !error && <p className="sk-empty">Loading the schedule…</p>
           )}
@@ -211,10 +225,13 @@ export function StaffBoard() {
         </div>
         <aside className="sk-side">
           <div className="sk-tabs" role="tablist">
+            <button type="button" role="tab" aria-selected={tab === 'booking'} onClick={() => setTab('booking')}>Booking</button>
             <button type="button" role="tab" aria-selected={tab === 'copilot'} onClick={() => setTab('copilot')}>Copilot</button>
             <button type="button" role="tab" aria-selected={tab === 'audit'} onClick={() => setTab('audit')}>Audit log{audit.length > 0 ? ` (${audit.length})` : ''}</button>
           </div>
-          {tab === 'copilot' && data ? (
+          {tab === 'booking' && data ? (
+            <BookingPanel booking={selected} services={data.services} staff={data.staff} timeZone={data.timeZone} api={api} onBooking={handleBooking} />
+          ) : tab === 'copilot' && data ? (
             <CopilotPanel bookings={data.bookings} staff={data.staff} plan={plan} onPlan={handlePlan} api={api} />
           ) : tab === 'audit' ? (
             <AuditList entries={audit} />

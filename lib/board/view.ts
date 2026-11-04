@@ -2,6 +2,7 @@
  * Pure logic behind the staff board, shared by the browser components and their tests. Nothing here
  * talks to the server: bookings and plans arrive as JSON from the staff API.
  */
+import { REPLAY_WINDOW_MS } from '@/lib/booking/replay-windows';
 
 export type BookingStatus =
   | 'awaiting_deposit'
@@ -27,8 +28,10 @@ export interface BoardBooking {
     authorizationId?: string;
     capture?: { amountCents: number };
     refunds?: Array<{ amountCents: number; status?: string }>;
-    pendingAction?: { kind: string };
+    pendingAction?: { kind: string; reason?: 'completed' | 'no_show'; since?: string };
     authorizeOutcomeUnknown?: boolean;
+    savedWallet?: { status?: string };
+    walletCharges?: Array<{ amountCents: number; status: string }>;
   };
 }
 
@@ -119,6 +122,236 @@ function refundable(booking: BoardBooking): number {
 /** What charge_saved_wallet takes when the plan gives no amount: the deposit not yet captured. */
 function walletRemainder(booking: BoardBooking): number {
   return booking.deposit.cents - (booking.hold?.capture?.amountCents ?? 0);
+}
+
+/**
+ * The money actions the board offers for a booking. They mirror the rules in
+ * lib/paypal/deposit-actions.ts, which still decides: the board only avoids offering a button that
+ * is bound to be refused.
+ */
+export type BoardAction =
+  | { kind: 'capture'; cents: number }
+  | { kind: 'no_show'; maxCents: number }
+  | { kind: 'void' }
+  | { kind: 'refund'; maxCents: number }
+  | { kind: 'wallet'; maxCents: number }
+  /** A call whose outcome PayPal never confirmed: only the same call, replayed, is allowed. */
+  | { kind: 'retry'; pending: string; reason?: 'completed' | 'no_show' };
+
+const WALLET_STATUSES: BookingStatus[] = ['completed', 'no_show_charged'];
+const FAILED_CHARGES = new Set(['DECLINED', 'FAILED']);
+
+/** The panel's "Saved wallet" line. A declined or failed charge took no money, so it is never "charged". */
+export function walletSummary(hold: BoardBooking['hold']): string | undefined {
+  if (!hold?.savedWallet) return undefined;
+  const charges = hold.walletCharges ?? [];
+  const taken = charges.filter((c) => !FAILED_CHARGES.has(c.status));
+  if (taken.length > 0) {
+    const pending = taken.some((c) => c.status !== 'COMPLETED');
+    return `charged ${dollars(taken.reduce((sum, c) => sum + c.amountCents, 0))}${pending ? ' (pending)' : ''}`;
+  }
+  const last = charges.at(-1);
+  return last ? `not charged (last try ${last.status.toLowerCase()})` : 'yes, not charged';
+}
+
+/**
+ * A call PayPal never confirmed, too old to replay: PayPal has forgotten its request id, so the server
+ * refuses the replay and sends the booking to review. Staff must check PayPal instead.
+ */
+export function replayExpired(booking: BoardBooking, now: Date = new Date()): boolean {
+  const pending = booking.hold?.pendingAction;
+  if (!pending?.since) return false;
+  const window = (REPLAY_WINDOW_MS as Record<string, number>)[pending.kind];
+  return window !== undefined && now.getTime() - Date.parse(pending.since) > window;
+}
+
+export function bookingActions(booking: BoardBooking, now: Date = new Date()): BoardAction[] {
+  const hold = booking.hold;
+  // No authorization means no hold: every money action needs one.
+  if (!hold?.authorizationId) return [];
+  if (hold.pendingAction) {
+    // While a call is unconfirmed the server only accepts its replay, and only inside the window.
+    if (replayExpired(booking, now)) return [];
+    return [{ kind: 'retry', pending: hold.pendingAction.kind, reason: hold.pendingAction.reason }];
+  }
+
+  switch (booking.status) {
+    case 'deposit_held':
+      return [{ kind: 'capture', cents: booking.deposit.cents }, { kind: 'no_show', maxCents: booking.deposit.cents }, { kind: 'void' }];
+    case 'deposit_pending':
+      return [{ kind: 'void' }];
+    case 'deposit_needs_review':
+      // A captured deposit can't be voided, and a refund waits until staff have checked it.
+      return hold.capture ? [] : [{ kind: 'void' }];
+    case 'completed':
+    case 'no_show_charged':
+    case 'partially_refunded': {
+      const actions: BoardAction[] = [];
+      const left = refundable(booking);
+      if (left > 0) actions.push({ kind: 'refund', maxCents: left });
+      const charged = (hold.walletCharges ?? []).some((c) => !FAILED_CHARGES.has(c.status));
+      const remainder = walletRemainder(booking);
+      if (WALLET_STATUSES.includes(booking.status) && hold.savedWallet && !charged && remainder >= 1) {
+        actions.push({ kind: 'wallet', maxCents: remainder });
+      }
+      return actions;
+    }
+    default:
+      return [];
+  }
+}
+
+/** The staff route and body for an action. `cents` is the amount the owner confirmed, where one applies. */
+export function actionRequest(action: BoardAction, bookingId: string, cents?: number): { path: string; body?: Record<string, unknown> } {
+  const base = `/api/bookings/${encodeURIComponent(bookingId)}`;
+  switch (action.kind) {
+    case 'capture':
+      return { path: `${base}/deposit/capture`, body: { reason: 'completed' } };
+    case 'no_show':
+      return { path: `${base}/deposit/capture`, body: { reason: 'no_show', amountCents: cents } };
+    case 'void':
+      return { path: `${base}/deposit/void` };
+    case 'refund':
+      return { path: `${base}/deposit/refund`, body: { amountCents: cents } };
+    case 'wallet':
+      return { path: `${base}/wallet/charge`, body: { amountCents: cents } };
+    case 'retry':
+      // No amount: the server replays the pending call with the amount it recorded.
+      switch (action.pending) {
+        case 'capture':
+          return { path: `${base}/deposit/capture`, body: { reason: action.reason ?? 'completed' } };
+        case 'void':
+          return { path: `${base}/deposit/void` };
+        case 'reauthorize':
+          return { path: `${base}/deposit/reauthorize` };
+        case 'refund':
+          return { path: `${base}/deposit/refund`, body: {} };
+        default:
+          return { path: `${base}/wallet/charge`, body: {} };
+      }
+  }
+}
+
+/** 1000 -> "10.00", for an amount field's starting value. */
+export function centsToInput(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+export type ParsedAmount = { ok: true; cents: number } | { ok: false; message: string };
+
+const AMOUNT_HELP = 'Write the amount like 4.00 or 4,00.';
+
+/**
+ * A dollar amount typed by a person, as cents, never through floating point. Both "4.50" and "4,50"
+ * work, as do thousands separators when the decimal mark is unambiguous ("1,234.50", "1.234,50").
+ * A lone separator followed by exactly three digits ("4,500", "1.234") could mean either, so it is
+ * refused rather than guessed.
+ */
+export function parseDollars(input: string, maxCents: number): ParsedAmount {
+  const text = input.trim().replace(/^\$\s*/, '').replace(/\s*(USD)?$/i, '');
+  const fail = (message: string): ParsedAmount => ({ ok: false, message });
+  if (!/^[\d.,]+$/.test(text) || !/\d/.test(text)) return fail(AMOUNT_HELP);
+
+  let whole: string;
+  let fraction = '';
+  const lastDot = text.lastIndexOf('.');
+  const lastComma = text.lastIndexOf(',');
+  if (lastDot !== -1 && lastComma !== -1) {
+    // Both marks: the last one is the decimal mark, the other groups thousands.
+    const decimal = lastDot > lastComma ? '.' : ',';
+    const group = decimal === '.' ? ',' : '.';
+    const [head, tail, ...rest] = text.split(decimal);
+    if (rest.length > 0 || !/^\d{1,2}$/.test(tail) || !new RegExp(`^\\d{1,3}(\\${group}\\d{3})+$`).test(head)) return fail(AMOUNT_HELP);
+    whole = head.split(group).join('');
+    fraction = tail;
+  } else if (lastDot !== -1 || lastComma !== -1) {
+    const mark = lastDot !== -1 ? '.' : ',';
+    const parts = text.split(mark);
+    if (parts.length === 2 && /^\d+$/.test(parts[0]) && /^\d{1,2}$/.test(parts[1])) {
+      whole = parts[0];
+      fraction = parts[1];
+    } else if (parts.every((part, i) => (i === 0 ? /^\d{1,3}$/.test(part) : /^\d{3}$/.test(part)))) {
+      return fail(`"${input.trim()}" could mean two different amounts. ${AMOUNT_HELP}`);
+    } else {
+      return fail(AMOUNT_HELP);
+    }
+  } else {
+    whole = text;
+  }
+
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  if (!Number.isSafeInteger(cents)) return fail(`The amount can be at most ${dollars(maxCents)}.`);
+  if (cents < 1) return fail('The amount must be at least $0.01.');
+  if (cents > maxCents) return fail(`The amount can be at most ${dollars(maxCents)}.`);
+  return { ok: true, cents };
+}
+
+/**
+ * State of the booking panel. Requests run per booking: every choice, request and message carries the
+ * booking it belongs to, so switching to another booking while PayPal answers never shows one
+ * customer's result on another's panel.
+ */
+export interface PanelState {
+  choice?: { bookingId: string; kind: BoardAction['kind']; amount: string };
+  /** Bookings with a request in flight. */
+  sending: string[];
+  /** The latest outcome per booking. */
+  messages: Record<string, { kind: 'done' | 'error'; text: string }>;
+}
+
+export type PanelEvent =
+  | { type: 'choose'; bookingId: string; action: BoardAction }
+  | { type: 'amount'; value: string }
+  | { type: 'cancel' }
+  | { type: 'start'; bookingId: string }
+  | { type: 'finish'; bookingId: string; ok: boolean; text: string };
+
+export const PANEL_START: PanelState = { sending: [], messages: {} };
+
+export function panelReducer(state: PanelState, event: PanelEvent): PanelState {
+  switch (event.type) {
+    case 'choose': {
+      const { [event.bookingId]: _old, ...messages } = state.messages;
+      const amount = 'maxCents' in event.action ? centsToInput(event.action.maxCents) : '';
+      return { ...state, messages, choice: { bookingId: event.bookingId, kind: event.action.kind, amount } };
+    }
+    case 'amount':
+      return state.choice ? { ...state, choice: { ...state.choice, amount: event.value } } : state;
+    case 'cancel':
+      return { ...state, choice: undefined };
+    case 'start': {
+      const { [event.bookingId]: _old, ...messages } = state.messages;
+      return { ...state, messages, sending: [...state.sending, event.bookingId] };
+    }
+    case 'finish':
+      return {
+        sending: state.sending.filter((id) => id !== event.bookingId),
+        // A choice for another booking, made meanwhile, stays open.
+        choice: event.ok && state.choice?.bookingId === event.bookingId ? undefined : state.choice,
+        messages: { ...state.messages, [event.bookingId]: { kind: event.ok ? 'done' : 'error', text: event.text } },
+      };
+  }
+}
+
+/**
+ * What the panel shows for one booking, worked out from its current state: a choice the booking no
+ * longer allows (a webhook or the copilot changed it meanwhile) is dropped, and amount limits follow
+ * the booking as it is now.
+ */
+export function panelView(state: PanelState, booking: BoardBooking, now: Date = new Date()) {
+  const actions = bookingActions(booking, now);
+  const chosen = state.choice?.bookingId === booking.id ? actions.find((a) => a.kind === state.choice!.kind) : undefined;
+  const amount = chosen ? state.choice!.amount : '';
+  const parsed = chosen && 'maxCents' in chosen ? parseDollars(amount, chosen.maxCents) : undefined;
+  return {
+    actions,
+    chosen,
+    amount,
+    parsed,
+    sending: state.sending.includes(booking.id),
+    message: state.messages[booking.id],
+    expired: replayExpired(booking, now),
+  };
 }
 
 /** A money call with an unconfirmed result outranks the status: the money may already have moved. */

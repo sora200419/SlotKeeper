@@ -23,6 +23,7 @@ import type {
   MoneyActionKind,
 } from '@/lib/booking/store';
 import { DepositError } from './deposits';
+import { REPLAY_WINDOW_MS } from '@/lib/booking/replay-windows';
 import {
   describePayPalError,
   describeTransportError,
@@ -63,19 +64,8 @@ const DECLINE_ISSUES = new Set([
   'REFUND_FAILED_INSUFFICIENT_FUNDS',
 ]);
 
-const HOUR_MS = 60 * 60 * 1000;
-
-/**
- * How long a replay may reuse a PayPal-Request-Id. PayPal forgets ids after 6 hours on Orders and 45
- * days on Payments (SDK docs); a later replay would run as a brand-new call, so it stops short of that.
- */
-const REPLAY_WINDOW_MS: Record<MoneyActionKind, number> = {
-  capture: 44 * 24 * HOUR_MS,
-  void: 44 * 24 * HOUR_MS,
-  reauthorize: 44 * 24 * HOUR_MS,
-  refund: 44 * 24 * HOUR_MS,
-  wallet_charge: 5 * HOUR_MS,
-};
+// Every money action kind has a replay window (a missing kind fails the type check).
+const REPLAY_WINDOWS: Record<MoneyActionKind, number> = REPLAY_WINDOW_MS;
 
 function loadHeldBooking(store: BookingStore, bookingId: string): HeldBooking {
   const booking = store.get(bookingId);
@@ -183,7 +173,7 @@ async function runMoneyAction<T>(
         `A ${pending.kind} is still being confirmed with PayPal. Retry that first.`,
       );
     }
-    if (now.getTime() - Date.parse(pending.since) > REPLAY_WINDOW_MS[kind]) {
+    if (now.getTime() - Date.parse(pending.since) > REPLAY_WINDOWS[kind]) {
       console.error(`[paypal] ${label}: too old to replay safely; needs review`, { bookingId: booking.id, since: pending.since });
       store.save({ ...booking, status: 'deposit_needs_review' });
       throw new DepositError(

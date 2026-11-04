@@ -104,6 +104,41 @@ describe('staff authorization', () => {
   });
 });
 
+describe('money route responses', () => {
+  it('never return the customer access-token hash', async () => {
+    captureAuthorizedPayment.mockResolvedValue({
+      result: { id: 'CAP-1', status: 'COMPLETED', amount: { currencyCode: 'USD', value: '10.00' } },
+    });
+    voidPayment.mockResolvedValue({ result: null });
+    reauthorizePayment.mockResolvedValue({ result: { id: 'AUTH-2', status: 'CREATED' } });
+    refundCapturedPayment.mockResolvedValue({
+      result: { id: 'REF-1', status: 'COMPLETED', amount: { currencyCode: 'USD', value: '10.00' } },
+    });
+    const withHash = () => {
+      const booking = { ...heldBooking(), accessTokenHash: 'a'.repeat(64) };
+      getBookingStore().save(booking);
+      return booking;
+    };
+
+    const captured = withHash();
+    const responses = [
+      await captureRoute(staffRequest(`/api/bookings/${captured.id}/deposit/capture`, { reason: 'completed' }), params(captured.id)),
+      await refundRoute(staffRequest(`/api/bookings/${captured.id}/deposit/refund`, {}), params(captured.id)),
+    ];
+    const voided = withHash();
+    responses.push(await voidRoute(staffRequest(`/api/bookings/${voided.id}/deposit/void`), params(voided.id)));
+    const renewed = withHash();
+    responses.push(await reauthorizeRoute(staffRequest(`/api/bookings/${renewed.id}/deposit/reauthorize`), params(renewed.id)));
+
+    for (const res of responses) {
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBeTruthy();
+      expect(body).not.toHaveProperty('accessTokenHash');
+    }
+  });
+});
+
 describe('POST /api/bookings/[id]/deposit/capture', () => {
   it('validates reason and amountCents before calling PayPal', async () => {
     const booking = heldBooking();

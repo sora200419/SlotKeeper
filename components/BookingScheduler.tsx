@@ -10,6 +10,8 @@ interface Props {
   day: string;
   hours: { open: number; close: number };
   timeZone: string;
+  /** A booking was clicked; a plan's ghost selects the booking it previews. */
+  onSelect?: (bookingId: string) => void;
 }
 
 /** The scheduler works in local dates, and events reach it as business wall-clock time (wallClock). */
@@ -40,12 +42,12 @@ function renderEvent({ eventRecord, renderData }: { eventRecord: EventModel; ren
 }
 
 /** The Bryntum Scheduler. It keeps its own store, so changes are applied to records, which animate. */
-export function BookingScheduler({ staff, events, day, hours, timeZone }: Props) {
+export function BookingScheduler({ staff, events, day, hours, timeZone, onSelect }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const scheduler = useRef<Scheduler | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const latest = useRef({ staff, events, day, hours });
-  latest.current = { staff, events, day, hours };
+  const latest = useRef({ staff, events, day, hours, onSelect });
+  latest.current = { staff, events, day, hours, onSelect };
 
   const applyEvents = (instance: Scheduler, next: BoardEvent[]) => {
     const store = instance.eventStore;
@@ -92,6 +94,9 @@ export function BookingScheduler({ staff, events, day, hours, timeZone }: Props)
           columns: [{ text: 'Staff', field: 'name', width: 130 }],
           resources: latest.current.staff,
           eventRenderer: renderEvent as never,
+          onEventClick: ({ eventRecord }: { eventRecord: EventModel }) => {
+            latest.current.onSelect?.(String(eventRecord.id).replace(/^ghost-/, ''));
+          },
           features: {
             eventTooltip: {
               template: ({ eventRecord }: { eventRecord: EventModel }) => {
