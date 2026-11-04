@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-// Harness 账本体检：防止 CLAUDE.md 膨胀、规则失去出处。
-//   node .claude/harness/lint.js            检查项目 ./CLAUDE.md（规则须带 F-编号，且在 FAILURES.md 中存在）
-//   node .claude/harness/lint.js --global   检查 ~/.claude/CLAUDE.md（规则须带"来源"）
-//   node .claude/harness/lint.js <文件>      检查指定文件
-// 有 error 时退出码为 1（pre-commit 会因此拦截提交）。
+// Harness ledger check: keeps CLAUDE.md from bloating and every rule traceable to a real mishap.
+//   node .claude/harness/lint.js            checks ./CLAUDE.md (each rule needs an F-number that exists in FAILURES.md)
+//   node .claude/harness/lint.js --global   checks ~/.claude/CLAUDE.md (each rule needs a source)
+//   node .claude/harness/lint.js <file>     checks the given file
+// Exits with code 1 when there are errors (the pre-commit hook then blocks the commit).
 'use strict';
 
 const fs = require('fs');
@@ -19,6 +19,12 @@ const LIMITS = {
   reviewAfterDays: 90,
 };
 
+// Ledger headings. The Chinese ones are kept so ledgers written before the English rename still pass.
+const TITLES = {
+  project: ['Mishaps and Prevention Rules', '错题与防范规程'],
+  global: ['Global Mishap Ledger', '全局错题集'],
+};
+
 function parseArgs(argv) {
   const global = argv.includes('--global');
   const fileArg = argv.find((a) => !a.startsWith('--'));
@@ -30,7 +36,7 @@ function parseArgs(argv) {
   return { global, file };
 }
 
-// 取出某个一级标题下的内容（到下一个一级标题为止）
+// The lines under a top-level heading, up to the next top-level heading.
 function section(lines, title) {
   const start = lines.findIndex((l) => l.trim() === `# ${title}`);
   if (start === -1) return null;
@@ -44,31 +50,31 @@ function lint({ global, file }) {
   const warnings = [];
   const infos = [];
   if (!fs.existsSync(file)) {
-    errors.push(`找不到 ${file}`);
+    errors.push(`Cannot find ${file}`);
     return { errors, warnings, infos, rules: 0 };
   }
   const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
   const rel = path.basename(file);
 
-  if (lines.length > LIMITS.fileLinesError) errors.push(`${rel} 共 ${lines.length} 行，超过上限 ${LIMITS.fileLinesError}。运行 harness-prune 精简。`);
-  else if (lines.length > LIMITS.fileLinesWarn) warnings.push(`${rel} 共 ${lines.length} 行，接近上限，建议精简。`);
+  if (lines.length > LIMITS.fileLinesError) errors.push(`${rel} has ${lines.length} lines, over the limit of ${LIMITS.fileLinesError}. Run harness-prune to trim it.`);
+  else if (lines.length > LIMITS.fileLinesWarn) warnings.push(`${rel} has ${lines.length} lines, close to the limit; consider trimming it.`);
 
-  const title = global ? '全局错题集' : '错题与防范规程';
-  const body = section(lines, title);
+  const titles = global ? TITLES.global : TITLES.project;
+  const body = titles.map((t) => section(lines, t)).find(Boolean);
   if (!body) {
-    errors.push(`${rel} 缺少一级标题 "# ${title}"。`);
+    errors.push(`${rel} is missing the top-level heading "# ${titles[0]}".`);
     return { errors, warnings, infos, rules: 0 };
   }
 
   const rules = body.filter((l) => /^\s*-\s+/.test(l.text));
-  if (rules.length > LIMITS.rulesError) errors.push(`规则 ${rules.length} 条，超过上限 ${LIMITS.rulesError}。先合并 / 自动化 / 删除，再新增。`);
-  else if (rules.length > LIMITS.rulesWarn) warnings.push(`规则 ${rules.length} 条，接近上限 ${LIMITS.rulesError}，建议近期运行 harness-prune。`);
+  if (rules.length > LIMITS.rulesError) errors.push(`${rules.length} rules, over the limit of ${LIMITS.rulesError}. Merge, automate or delete rules before adding new ones.`);
+  else if (rules.length > LIMITS.rulesWarn) warnings.push(`${rules.length} rules, close to the limit of ${LIMITS.rulesError}; run harness-prune soon.`);
 
   let failures = null;
   if (!global) {
     const fp = path.join(path.dirname(file), 'FAILURES.md');
     failures = fs.existsSync(fp) ? fs.readFileSync(fp, 'utf8') : null;
-    if (failures === null && rules.length) errors.push('找不到同目录下的 FAILURES.md，规则无法追溯出处。');
+    if (failures === null && rules.length) errors.push('Cannot find FAILURES.md next to it, so rules cannot be traced to their source.');
   }
 
   const seenIds = new Map();
@@ -77,27 +83,27 @@ function lint({ global, file }) {
     const where = `${rel}:${line}`;
     const m = text.match(/^\s*-\s+\*\*\[(\d{4}-\d{2}-\d{2})\]\s*(.+?)\*\*\s*[:：]\s*(.+)$/);
     if (!m) {
-      errors.push(`${where} 格式应为 "- **[YYYY-MM-DD] 标题**：规则。(出处)"`);
+      errors.push(`${where} should look like "- **[YYYY-MM-DD] Title**: rule. (source)"`);
       continue;
     }
     const [, date, , rule] = m;
-    if (text.length > LIMITS.ruleChars) warnings.push(`${where} 规则过长（${text.length} 字符），应压缩到 2 句以内。`);
+    if (text.length > LIMITS.ruleChars) warnings.push(`${where} rule is too long (${text.length} characters); keep it to 2 sentences.`);
     const sentences = rule.replace(/\([^)]*\)|（[^）]*）|`[^`]*`/g, '').split(/[。！？!?]|\.\s/).filter((s) => s.trim()).length;
-    if (sentences > 2) warnings.push(`${where} 超过 2 句，应只保留"触发条件 → 必须动作"。`);
+    if (sentences > 2) warnings.push(`${where} has more than 2 sentences; keep only "trigger → required action".`);
 
     if (global) {
-      if (!/来源\s*[:：]/.test(text)) errors.push(`${where} 缺少出处，格式 "(来源: 项目名 F-编号)"。`);
+      if (!/(来源|Source)\s*[:：]/.test(text)) errors.push(`${where} has no source; use "(Source: project F-number)".`);
     } else {
       const ids = text.match(/\bF-\d{3,}\b/g) || [];
-      if (!ids.length) errors.push(`${where} 缺少 F-编号，回答不了"它防的是哪次真实翻车"。`);
+      if (!ids.length) errors.push(`${where} has no F-number, so it cannot say which real mishap it prevents.`);
       for (const id of ids) {
-        if (failures !== null && !new RegExp(`###\\s+${id}\\b`).test(failures)) errors.push(`${where} 引用的 ${id} 在 FAILURES.md 中不存在。`);
-        if (seenIds.has(id)) warnings.push(`${where} 与第 ${seenIds.get(id)} 行引用同一个 ${id}，考虑合并。`);
+        if (failures !== null && !new RegExp(`###\\s+${id}\\b`).test(failures)) errors.push(`${where} cites ${id}, which is not in FAILURES.md.`);
+        if (seenIds.has(id)) warnings.push(`${where} cites the same ${id} as line ${seenIds.get(id)}; consider merging them.`);
         seenIds.set(id, line);
       }
     }
     const age = (now - Date.parse(date)) / 86400000;
-    if (age > LIMITS.reviewAfterDays) infos.push(`${where} 已 ${Math.floor(age)} 天，复审时确认它是否仍在防真实翻车。`);
+    if (age > LIMITS.reviewAfterDays) infos.push(`${where} is ${Math.floor(age)} days old; at review, confirm it still prevents a real mishap.`);
   }
   return { errors, warnings, infos, rules: rules.length };
 }
@@ -105,14 +111,14 @@ function lint({ global, file }) {
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   const { errors, warnings, infos, rules } = lint(opts);
-  const label = opts.global ? '全局账本' : '项目账本';
+  const label = opts.global ? 'global ledger' : 'project ledger';
   for (const e of errors) console.log(`  ✗ ${e}`);
   for (const w of warnings) console.log(`  ! ${w}`);
   for (const i of infos) console.log(`  · ${i}`);
-  console.log(`[Harness lint] ${label} ${opts.file}：${rules} 条规则，${errors.length} 个错误，${warnings.length} 个警告。`);
+  console.log(`[Harness lint] ${label} ${opts.file}: ${rules} rules, ${errors.length} errors, ${warnings.length} warnings.`);
   process.exit(errors.length ? 1 : 0);
 }
 
 if (require.main === module) main();
 
-module.exports = { lint, LIMITS };
+module.exports = { lint, LIMITS, TITLES };

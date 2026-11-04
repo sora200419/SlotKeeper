@@ -27,8 +27,8 @@
 **Out of scope (prevents feature creep)**
 - Real money / PayPal live environment: sandbox only.
 - More than one app instance (locks and write queue live in the process; `numInstances: 1`).
-- Customer chat assistant (PLAN P0 #5): 待确认 whether it is formally dropped in favour of the MCP server.
-- Waitlist backfill, invoicing for balance and tips, risk-based deposits, multi-currency: listed in devpost "What's next"; 待确认 that none is attempted before submission.
+- Customer chat assistant (PLAN P0 #5): TBC whether it is formally dropped in favour of the MCP server.
+- Waitlist backfill, invoicing for balance and tips, risk-based deposits, multi-currency: listed in devpost "What's next"; TBC that none is attempted before submission.
 
 ## 4. Tech Stack
 | Layer | Choice |
@@ -81,10 +81,10 @@ PayPal/
 - [x] Staff board, copilot UI, Postgres storage, revision checks for overlapping instances (10-31)
 - [x] Webpack build for Render memory; follow-redirects security fix; copilot on Haiku 5.5 (10-31)
 - [x] README + Devpost submission copy; agent-tools positioning (11-04)
-- [x] Board money-action buttons with confirmations (11-04, 6306bff)
+- [x] Board money-action buttons with confirmations (11-04, 6306bff); deployed to Render 11-04, storage loaded from Postgres
 
 **In progress**
-- [ ] Deploy 6306bff to Render: pushed to main; waiting for a manual deploy (autoDeploy is off). Last confirmed live commit: 2a7d10c (11-04).
+- [ ] Nothing in progress.
 
 **To do (by priority)**
 - [ ] Rotate the PayPal secret and STAFF_API_TOKEN; add ANTHROPIC_API_KEY with a spending cap (Render + `.env.local`)
@@ -98,7 +98,7 @@ PayPal/
 **Known issues**
 - The copilot has never run against the real Anthropic API (tests and scripted model only).
 - MCP: not confirmed live that PayPal returns the approval link for an order created with `return=minimal`.
-- Bryntum trial watermark; trial validity through judging: 待确认.
+- Bryntum trial watermark; trial validity through judging: TBC.
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.
 - The board can briefly show an older booking state if a slow action response lands after a newer live update; a Retry button stays visible on a panel left open past the replay window (the server refuses it safely).
 - Payouts carry a tip field, but nothing creates tips yet.
@@ -157,6 +157,7 @@ Deploy: Render dashboard → `slotkeeper` → Manual Deploy → Deploy latest co
 | 2026-10-31 | Postgres write-through records with revisions | Bookings must survive restarts; overlapping instances must not overwrite each other |
 | 2026-10-31 | Build with webpack, not Turbopack | Turbopack peaked at 21 GB; Render stops builds at 8 GB |
 | 2026-10-31 | Copilot defaults to Claude Haiku 5.5 (`COPILOT_MODEL`) | Lower cost during judging; Sonnet/Opus still selectable |
+| 2026-11-04 | Repo Markdown in English; ledger heading renamed | lint.js accepts the new heading and the older Chinese one |
 | 2026-11-04 | No PayPal agent-toolkit runtime dependency | Its tools lack authorize/void/reauthorize/Payouts/Vault; money steps stay in our tested functions |
 
 ## 15. Harness Workflow (mandatory)
@@ -166,4 +167,4 @@ Deploy: Render dashboard → `slotkeeper` → Manual Deploy → Deploy latest co
 4. **Gates cannot be bypassed**: if a hook blocks you, do not work around it; explain and let the user decide.
 5. **Automate instead of prompting**: a rule enforceable by a hook / lint / test becomes code and is only recorded in `FAILURES.md`.
 
-# 错题与防范规程
+# Mishaps and Prevention Rules

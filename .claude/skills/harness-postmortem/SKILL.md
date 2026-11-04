@@ -1,65 +1,65 @@
 ---
 name: harness-postmortem
-description: 翻车复盘与错题入账。用户纠正你、你踩坑返工、或测试 / 审查暴露出你引入的错误之后使用：分析根因，判定是全局通用教训还是项目特有教训，提炼一条不超过 2 句的防范规则写入对应账本，并输出可直接粘贴的规则原文。也用于用户说"把这次翻车记下来 / 写进错题集 / 总结根因"。
+description: Mishap postmortem and ledger entry. Use after the user corrects you, after a pitfall forced rework, or after tests / review expose a bug you introduced: find the root cause, decide whether the lesson is global or project-specific, distil one prevention rule of at most 2 sentences into the matching ledger, and output the rule text ready to paste. Also use when the user says "log this mishap", "add it to the ledger", or "summarise the root cause".
 ---
 
-# 翻车复盘（Postmortem）
+# Postmortem
 
-复盘不替代修复：**先把问题修好并验证**，再做下面的步骤。
+A postmortem does not replace the fix: **fix the problem and verify it first**, then do the steps below.
 
-## 1. 根因（写给自己看，1–3 句）
+## 1. Root cause (for yourself, 1–3 sentences)
 
-按"现象 → 直接原因 → 根因"追问，根因要落到**当时为什么会这样做**：
-- 缺信息（没读相关文件 / 文档 / 已有规则）
-- 错误假设（以为某 API、版本、路径、环境是某种样子）
-- 没验证（没跑测试、没实际执行、没看输出就宣布完成）
-- 越界（做了用户没要求的改动）
+Ask "symptom → direct cause → root cause"; the root cause must land on **why it was done that way at the time**:
+- Missing information (did not read the relevant files / docs / existing rules)
+- Wrong assumption (thought an API, version, path or environment was a certain way)
+- Not verified (declared done without running tests, executing it, or reading the output)
+- Out of scope (made changes the user did not ask for)
 
-## 2. 判定归属
+## 2. Decide where it belongs
 
-| 归属 | 判定标准 | 写入位置 |
+| Belongs to | Criterion | Written to |
 | --- | --- | --- |
-| **全局** | 换任何仓库都可能再犯：通用语言 / 工具 / 库的坑、安全原则、工作习惯 | `~/.claude/CLAUDE.md` 的 `# 全局错题集` |
-| **项目** | 依赖本项目的业务逻辑、目录结构、数据库架构、部署流程、特定版本 | 项目根 `CLAUDE.md` 的 `# 错题与防范规程` |
+| **Global** | Could happen again in any repository: general language / tool / library pitfalls, security principles, work habits | the global ledger section of `~/.claude/CLAUDE.md` |
+| **Project** | Depends on this project's business logic, directory layout, database schema, deploy process or specific versions | `# Mishaps and Prevention Rules` in the project root `CLAUDE.md` |
 
-拿不准时选**项目**（影响面小），在 `harness-prune` 时再决定是否升级为全局。
+When unsure, choose **project** (smaller blast radius) and decide during `harness-prune` whether to promote it to global.
 
-## 3. 先查重，再考虑自动化
+## 3. Check for duplicates, then consider automation
 
-1. 读目标账本。已有相近规则 → **改写合并**那一条，不新增。
-2. 同一规则的复发 → 在 FAILURES.md 原条目的「复发记录」追加，并把这条规则**改为自动化**（复发说明 Prompt 规则管不住）。
-3. 能用代码强制的（Hook 拦截规则、lint、测试、类型检查）→ 优先实现它：
-   - 改动小（如给 `.claude/hooks/harness-guard.js` 加一条规则 + 测试用例）：直接做，跑通测试。
-   - 改动大：向用户提议，不擅自动手。
-   - 已自动化的规则**不进** CLAUDE.md，只在 FAILURES.md 的「规则去向」写明 `已自动化为 <路径>`。
+1. Read the target ledger. A similar rule exists → **rewrite and merge** that one; do not add a new one.
+2. A recurrence of the same rule → append to "Recurrences" in its FAILURES.md entry, and **automate** the rule (a recurrence shows a prompt rule cannot hold it).
+3. Anything code can enforce (a hook rule, lint, a test, a type check) → implement that first:
+   - Small change (e.g. a rule plus test cases in `.claude/hooks/harness-guard.js`): do it and get the tests passing.
+   - Large change: propose it to the user; do not start on your own.
+   - Automated rules **do not go** into CLAUDE.md; FAILURES.md "Rule destination" just says `automated as <path>`.
 
-## 4. 写规则
+## 4. Write the rule
 
-- 不超过 2 句；写成"在【触发条件】时 → 必须【动作】"，可被检验，不讲故事。
-- 好：`修改数据库迁移文件前，先运行 \`npm run db:diff\` 确认与线上结构一致。`
-- 坏：`要小心数据库。`（无触发条件、不可检验）
+- At most 2 sentences, in the form "when [trigger] → must [action]"; checkable, no storytelling.
+- Good: `Before editing a database migration file, run \`npm run db:diff\` to confirm it matches the live schema.`
+- Bad: `Be careful with the database.` (no trigger, cannot be checked)
 
-## 5. 入账
+## 5. Record it
 
-1. **FAILURES.md**（当前项目根目录，全局教训也要记，因为事故发生在这里）：新增 `### F-NNN · YYYY-MM-DD · 标题`，编号取现有最大值 +1，按文件里的条目格式填写。
-2. **规则行**写进第 2 步确定的账本：
-   - 项目：`- **[YYYY-MM-DD] 标题**：规则。(F-NNN)`
-   - 全局：`- **[YYYY-MM-DD] 标题**：规则。(来源: <项目目录名> F-NNN)`
-   - 全局账本没有 `# 全局错题集` 标题时，在文件末尾补上该标题再追加。
-3. 运行体检：项目 `node .claude/harness/lint.js`；全局加 `--global`。项目里没有该脚本时用全局副本 `~/.claude/hooks/harness/lint.js`。不通过就修正格式。
+1. **FAILURES.md** (in the current project root; record global lessons here too, since the incident happened here): add `### F-NNN · YYYY-MM-DD · Title`, numbered one above the current highest, filled in using the entry format in that file.
+2. Write the **rule line** into the ledger chosen in step 2:
+   - Project: `- **[YYYY-MM-DD] Title**: rule. (F-NNN)`
+   - Global: `- **[YYYY-MM-DD] Title**: rule. (<tag>: <project folder name> F-NNN)`, where `<tag>` is the source tag the global ledger already uses. Today that is `来源`: the global ledger and the global lint copy `~/.claude/hooks/harness/lint.js` accept only that tag and the heading `# 全局错题集`. This repo's lint also accepts `Source` and `# Global Mishap Ledger`, but use those only once the global lint copy accepts them too.
+   - If the global ledger has no ledger heading yet, add the heading the global lint copy expects at the end of the file and append below it.
+3. Run the check: project `node .claude/harness/lint.js`; global add `--global`. If the project has no such script, use the global copy `~/.claude/hooks/harness/lint.js`. Fix the format if it fails.
 
-如果用户只要求"输出 / 总结"而没要求写入，则跳过第 5 步，只做第 6 步。
+If the user only asked for an "output / summary" and not for a write, skip step 5 and do only step 6.
 
-## 6. 向用户汇报（固定格式）
+## 6. Report to the user (fixed format)
 
 ````
-**根因**：……（1–2 句）
-**归属**：全局 / 项目 —— 理由一句
-**已写入**：<文件路径>（或"未写入，仅输出"）
+**Root cause**: … (1–2 sentences)
+**Belongs to**: global / project, with a one-line reason
+**Written to**: <file path> (or "not written, output only")
 
 ```markdown
-- **[YYYY-MM-DD] 标题**：规则。(来源: <项目> F-NNN)
+- **[YYYY-MM-DD] Title**: rule. (<tag>: <project> F-NNN)
 ```
 ````
 
-代码块里的规则原文必须能直接粘贴进 `~/.claude/CLAUDE.md` 或项目 `CLAUDE.md`。
+Fill in `<tag>` as in step 5. The rule text in the code block must paste directly into `~/.claude/CLAUDE.md` or the project `CLAUDE.md`.

@@ -1,120 +1,120 @@
-# 翻车档案（FAILURES.md）
+# Mishap Log (FAILURES.md)
 
-> 这里记录每次翻车的完整经过。本文件**不会**被自动加载进上下文（省 token）；
-> `CLAUDE.md` 的《错题与防范规程》只保留一句话规则，并用 `F-编号` 指回这里。
+> The full story of every mishap goes here. This file is **not** loaded into context automatically (it saves tokens);
+> the "Mishaps and Prevention Rules" section of `CLAUDE.md` keeps only one-sentence rules and points back here with an `F-number`.
 
-## 条目格式
+## Entry format
 
 ```markdown
-### F-001 · YYYY-MM-DD · 一句话标题
-- **现象**：用户看到了什么错误 / 哪一步出了问题
-- **根因**：为什么当时会这样做（缺信息？错误假设？没验证？没读规则？）
-- **修复**：怎么修的，对应提交或文件
-- **规则去向**：项目 CLAUDE.md / 全局 ~/.claude/CLAUDE.md / 已自动化为 `<文件路径>`
-- **复发记录**：无（复发一次就说明 Prompt 规则不够用，应改为自动化）
+### F-001 · YYYY-MM-DD · One-line title
+- **Symptom**: what error the user saw / which step went wrong
+- **Root cause**: why it was done that way (missing information? wrong assumption? not verified? rule not read?)
+- **Fix**: how it was fixed, with the commit or files
+- **Rule destination**: project CLAUDE.md / global ~/.claude/CLAUDE.md / automated as `<file path>`
+- **Recurrences**: none (one recurrence means a prompt rule is not enough and it should be automated)
 ```
 
-## 记录
+## Entries
 
-### F-001 · 2026-10-24 · Bash heredoc 写多行文件反复解析失败
-- **现象**：用 Bash 的 `cat > file <<'EOF' … EOF` 一次写入多个含引号、反引号、`${}` 的 TS/TSX 文件时，三次报 `unexpected EOF while looking for matching '`，整段脚本一行都没执行，只能返工改用文件工具重写。
-- **根因**：错误假设——以为带引号定界符的 heredoc 在这个 Bash 工具里总是按字面处理；实际上长脚本里多段 heredoc 加嵌入的 python 片段会让外层解析出错，而且出错时整段都不执行。第一次失败后没有换方法，又重复了两次。
-- **修复**：改用 Write / Edit 工具写入 `components/`、`app/book/`、`tests/paypal/deposits.test.ts` 等文件；Bash 只用来跑命令。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-001 · 2026-10-24 · Writing multi-line files with a Bash heredoc kept failing to parse
+- **Symptom**: Writing several TS/TSX files containing quotes, backticks and `${}` in one go with Bash `cat > file <<'EOF' … EOF` failed three times with `unexpected EOF while looking for matching '`. Not one line of the script ran, and the files had to be rewritten with the file tools.
+- **Root cause**: Wrong assumption: that a heredoc with a quoted delimiter is always taken literally in this Bash tool. In a long script, several heredocs plus embedded python snippets broke the outer parse, and on failure nothing in the script runs. After the first failure the method was not changed, and the same thing was tried twice more.
+- **Fix**: Wrote `components/`, `app/book/`, `tests/paypal/deposits.test.ts` and the other files with the Write / Edit tools; Bash is only for running commands.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-002 · 2026-10-25 · 原样重抛 SDK 错误导致鉴权头泄露到日志
-- **现象**：OAuth 令牌请求遇到 TLS 拦截时，Next.js 把整个 axios 错误打印到开发服务器日志，包含 `Authorization: Basic <clientId:secret>`。复核又发现另一条路径：SDK 的 `ResponseValidationError` 没有被识别，原样抛出，同样携带鉴权头。
-- **根因**：错误假设——以为 SDK 抛出的错误只有 ApiError 一种，且只要不是网络错误就"按原样抛出"是安全的。实际上 SDK 的错误对象会保留 request 及其鉴权头，而 Next.js 会完整打印错误对象。修第一条时没有追问还有哪些错误类型会走到同一个 `throw err` 分支。
-- **修复**：`lib/paypal/errors.ts` 新增 `sanitizeError`（只保留名称和首行信息）；health、deposits、响应助手的所有兜底分支改用它；新增用例断言密钥不出现在返回值、堆栈、JSON 或 console 输出中。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：第二次（ResponseValidationError）在同一功能里被复核发现，因此规则改为全局并附测试要求。
+### F-002 · 2026-10-25 · Rethrowing an SDK error unchanged leaked the auth header into logs
+- **Symptom**: When the OAuth token request hit TLS interception, Next.js printed the whole axios error to the dev server log, including `Authorization: Basic <clientId:secret>`. Review then found a second path: the SDK's `ResponseValidationError` was not recognised and was thrown as is, carrying the same auth header.
+- **Root cause**: Wrong assumption: that the SDK only throws ApiError, and that "rethrow as is" is safe for anything that is not a network error. In fact the SDK's error objects keep the request and its auth header, and Next.js prints error objects in full. While fixing the first path, nobody asked which other error types reach the same `throw err` branch.
+- **Fix**: Added `sanitizeError` in `lib/paypal/errors.ts` (keeps only the name and the first line of the message); every fallback branch in health, deposits and the response helpers uses it; new tests assert the secret never appears in the return value, stack, JSON or console output.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: The second path (ResponseValidationError) was found by review in the same feature, so the rule was made global and requires a test.
 
-### F-003 · 2026-10-26 · 资金动作"读 → await → 写回旧副本"导致并发丢写
-- **现象**：裁判审查用并发复现证明：capture 与 void 同时执行时，void 的 4xx 分支写回 await 之前读到的旧 booking，PayPal 已扣款但记录仍是 `deposit_held` 且没有 capture；两笔退款同时执行时共用同一个 PayPal-Request-Id，并记录了错误金额。
-- **根因**：错误假设——只考虑了单个请求内的幂等和重放，默认同一预约不会被同时操作；没有追问"await 期间别的请求改了这条记录会怎样"。
-- **修复**：`lib/paypal/deposit-actions.ts` 加每个预约一把进程内锁 `withBookingLock`，在锁内读取预约；退款也校验 PayPal 返回金额；`tests/paypal/deposit-actions.test.ts` 新增并发用例。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：2026-10-26 提示词 4（同日）：webhook 处理器在锁外先读 PayPal 对象，等锁后再写入这份旧快照，乱序事件能把 COMPLETED 写回 PENDING（审查 R1）。规则写的是"在锁内读取预约"，没覆盖"锁外读到的外部状态"。已修为锁内重读（`withFreshRead`）。复发说明靠 Prompt 规则管不住；可自动化方案（如 lint 检查 `withBookingLock` 回调外的 SDK 读）改动较大，已向用户提议。
+### F-003 · 2026-10-26 · Money actions did "read → await → write back the old copy" and lost concurrent writes
+- **Symptom**: The referee review reproduced it concurrently: with capture and void running at the same time, void's 4xx branch wrote back the booking read before its await. PayPal had captured, but the record was still `deposit_held` with no capture. Two concurrent refunds shared one PayPal-Request-Id and recorded the wrong amount.
+- **Root cause**: Wrong assumption: only idempotency and replay within one request were considered, assuming one booking is never acted on twice at once. Nobody asked "what if another request changes this record during the await?"
+- **Fix**: `lib/paypal/deposit-actions.ts` got an in-process lock per booking, `withBookingLock`, and reads the booking inside the lock; refunds also check the amount PayPal returns; `tests/paypal/deposit-actions.test.ts` got concurrency tests.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: 2026-10-26, prompt 4 (same day): the webhook handler read the PayPal object outside the lock, then wrote that stale snapshot once it held the lock, so out-of-order events could turn COMPLETED back into PENDING (review R1). The rule said "read the booking inside the lock" and did not cover "external state read outside the lock". Fixed by re-reading inside the lock (`withFreshRead`). The recurrence shows a prompt rule cannot hold this; an automated option (such as a lint check for SDK reads outside a `withBookingLock` callback) is a larger change and was proposed to the user.
 
-### F-004 · 2026-10-26 · 竞态回归测试在撤掉修复后依然通过
-- **现象**：为 R1 写的回归测试把事件 A 排在锁里 B 之前，坏的顺序根本没发生；裁判把修复改回去（突变）后测试仍然绿，R1 因此第二轮未关闭。
-- **根因**：没验证——写完测试只看它在修复后通过，没确认它在没有修复时会失败。
-- **修复**：测试改为先完整应用 B，再放行 A 的旧读取；临时把 `lib/paypal/webhook-events.ts` 的重读改成 `const fresh = first;`，确认测试失败（Received "PENDING"）后还原。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-004 · 2026-10-26 · A race regression test still passed with the fix removed
+- **Symptom**: The regression test written for R1 queued event A ahead of B in the lock, so the bad order never happened; when the referee reverted the fix (a mutation) the test stayed green, and R1 stayed open for a second round.
+- **Root cause**: Not verified: the test was only seen passing with the fix, never confirmed to fail without it.
+- **Fix**: The test now applies B fully first, then releases A's stale read. Temporarily changing the re-read in `lib/paypal/webhook-events.ts` to `const fresh = first;` made the test fail (Received "PENDING"), and the change was then restored.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-005 · 2026-10-28 · 新增扣款入口没守住"总额 ≤ 押金"，两个方向各漏一次
-- **现象**：提示词 5 的已保存钱包扣款，第一版没有次数和总额上限，成功后重试会再扣一次（审查 R1）；补上"已 capture 计入上限"后，审查又发现反方向：先在 deposit_held 扣钱包，再 capture 授权，客户付两倍押金（R8）。
-- **根因**：错误假设——只在新入口（钱包扣款）里检查限额，没把已有的扣款入口（`captureDeposit`）当成同一笔钱的另一扇门；"重试成功后的请求"也没算进幂等范围。
-- **修复**：钱包扣款只允许在押金流程结束后（completed / no_show_charged，capture 是 final），每个预约最多一次，且与已 capture 合计不超过押金；测试覆盖两种顺序，并用突变确认测试会失败。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：2026-10-30 提示词 8（MCP）：同一个时段可以被付两次押金——未付保留过期、时段被别人订走后，旧的 PayPal 链接仍能授权（审查 R1）；修好后又发现已取消的预约仍能经浏览器授权路由放押金（R8）。原规则只说"钱"，没覆盖"同一个稀缺资源（时段）"和"已取消等终态"，所以规则已扩写。可自动化方向（较大，留给用户决定）：为每种会放押金的路径写一份共享的"入口清单"测试，新增入口时必须登记。
+### F-005 · 2026-10-28 · A new charge path missed "total ≤ deposit", once in each direction
+- **Symptom**: The first version of prompt 5's saved-wallet charge had no limit on count or total, so a retry after success charged again (review R1). After "count what was already captured" was added, review found the reverse order: charge the wallet while deposit_held, then capture the authorization, and the customer pays twice the deposit (R8).
+- **Root cause**: Wrong assumption: the limit was only checked in the new path (wallet charge), and the existing charge path (`captureDeposit`) was not treated as another door to the same money; "a request repeated after success" was not counted as part of idempotency either.
+- **Fix**: The wallet can only be charged after the deposit flow has ended (completed / no_show_charged, where the capture is final), at most once per booking, and together with what was captured it cannot exceed the deposit; tests cover both orders and were mutation-checked to fail.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: 2026-10-30, prompt 8 (MCP): one slot could be paid for twice. After an unpaid hold expired and someone else booked the slot, the old PayPal link could still authorize (review R1); after that fix, a cancelled booking could still take a deposit through the browser authorize route (R8). The original rule only said "money" and did not cover "the same scarce resource (a slot)" or "terminal states such as cancelled", so the rule was widened. Automation option (larger, left to the user): a shared "entry list" test for every path that can take a deposit, which a new path must register in.
 
-### F-006 · 2026-10-30 · 按天结算的批次在当天未结束时就定死，晚到的钱永远漏发
-- **现象**：提示词 6 的日结 Payouts 第一版默认结算"今天"，结果当场被定死（nothing_to_pay 或 submitted 后只刷新），当天之后的收入永远不发；PENDING 后来才完成的钱仍按最初时间戳归日，也会漏掉（审查 R1）。复核又发现午夜竞态：23:59:58 开始的扣款在午夜后才保存，零点刚过跑的日结会漏掉它（R9）。
-- **根因**：错误假设——把"批次只算一次、之后冻结"的幂等设计，用在了仍可能变化的时间窗上；没有问"这个窗口什么时候真正不再变"。
-- **修复**：只允许结算结束超过 15 分钟宽限的日子（默认昨天）；钱从 PENDING 变 COMPLETED 时记录 settledAt，按完成那天归日；并限制 PAYPAL_TIMEOUT_MS ≤ 60 秒，保证宽限期大于任何请求时长。三处都用突变确认测试会失败。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-006 · 2026-10-30 · A daily batch was frozen before the day ended, so late money was never paid out
+- **Symptom**: The first version of prompt 6's end-of-day Payouts settled "today" by default and froze it on the spot (nothing_to_pay, or only refreshes after submitted), so income later that day was never paid; money that went from PENDING to completed later was still dated by its first timestamp and also missed (review R1). Re-review found a midnight race: a capture started at 23:59:58 and saved after midnight was missed by a payout run just after midnight (R9).
+- **Root cause**: Wrong assumption: the idempotent "compute a batch once, then freeze it" design was applied to a time window that could still change; nobody asked "when does this window really stop changing?"
+- **Fix**: Only days that ended more than 15 minutes ago can be settled (default: yesterday); when money goes from PENDING to COMPLETED, settledAt is recorded and the money is dated by the day it completed; PAYPAL_TIMEOUT_MS is capped at 60 seconds so the grace period is longer than any request. All three were mutation-checked to fail.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-008 · 2026-10-30 · 路由测试依赖真实日期（重犯全局规则"测试不依赖真实日期"）
-- **现象**：提示词 9 的报表路由测试写死了 2026-10 的日期范围，但路由用真实时钟，而 Transaction Search 只允许三年内的范围；约 2029 年这个必跑测试会自己变成 400 失败（复核 R7）。单元测试有固定 NOW，路由测试漏了。
-- **根因**：没读规则——全局错题集 [2026-10-21] 已写明断言涉及日期时必须用固定日期或假时钟；写路由测试时只想到"传参"的单元测试固定了时钟，没意识到路由内部取的是真实时间。
-- **修复**：`tests/api/report-route.test.ts` 用 `vi.useFakeTimers({ toFake: ['Date'] })` 固定在 2026-11-01，afterEach 恢复；把时钟临时设到 2030 确认旧写法会失败后还原。
-- **规则去向**：沿用全局 ~/.claude/CLAUDE.md《测试不依赖真实日期》（不新增条目）。这是该规则的复发：可自动化方案（改动较大，留给用户决定）——在 vitest 的 setupFiles 里为所有测试统一固定 Date，从根上禁止依赖真实日期。
-- **复发记录**：首次记录于 Fiverr F-007；本条为在本项目的复发。
+### F-008 · 2026-10-30 · A route test depended on the real date (a repeat of the global rule "tests do not depend on the real date")
+- **Symptom**: Prompt 9's report route test hard-coded an October 2026 date range, but the route uses the real clock and Transaction Search only allows ranges within three years; around 2029 this required test would turn into a 400 failure by itself (re-review R7). The unit tests had a fixed NOW; the route test did not.
+- **Root cause**: Rule not read: the global ledger entry [2026-10-21] already says assertions involving dates must use a fixed date or a fake clock. While writing the route test, only the unit tests that pass the time in had a fixed clock, and it was missed that the route reads the real time inside.
+- **Fix**: `tests/api/report-route.test.ts` uses `vi.useFakeTimers({ toFake: ['Date'] })` fixed at 2026-11-01 and restores it in afterEach; setting the clock to 2030 temporarily confirmed the old version fails, then it was restored.
+- **Rule destination**: Reuses the global ~/.claude/CLAUDE.md rule "tests do not depend on the real date" (no new entry). This is a recurrence of that rule. Automation option (larger, left to the user): fix Date for every test in vitest's setupFiles, ruling out the real date at the root.
+- **Recurrences**: First recorded as Fiverr F-007; this entry is its recurrence in this project.
 
-### F-007 · 2026-10-30 · 多步计划执行到一半抛未知异常，计划永久卡在 executing
-- **现象**：提示词 7 的 approvePlan 对不认识的错误（如 run_payouts 构建依赖时的 PayPalConfigError）直接重抛：前面的扣款已经发生，但计划停在 executing 无法再批准或拒绝，结果没写回，失败步骤也没进审计日志（审查 R1）。
-- **根因**：错误假设——把"未知错误重抛给上层"这条单请求场景的习惯，用在了已经产生副作用的多步执行器上；没考虑重抛后谁来收尾。
-- **修复**：stepError 永不抛出，未知错误记为 unexpected_error（只保留清洗后的名称和首行），计划一定被标记 failed、写回结果并审计；用突变确认测试会失败。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-007 · 2026-10-30 · A multi-step plan threw an unknown error half way and stayed stuck in executing
+- **Symptom**: Prompt 7's approvePlan rethrew errors it did not recognise (such as a PayPalConfigError while building run_payouts dependencies): earlier charges had already happened, but the plan stayed in executing and could no longer be approved or rejected, results were not written back, and the failed step never reached the audit log (review R1).
+- **Root cause**: Wrong assumption: the single-request habit "rethrow unknown errors to the caller" was used in a multi-step executor that had already caused side effects; nobody considered who cleans up after the rethrow.
+- **Fix**: stepError never throws; an unknown error is recorded as unexpected_error (keeping only the sanitised name and first line), and the plan is always marked failed, its results written back and audited; mutation-checked to fail.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-009 · 2026-10-30 · 映射表有两份，只改了一份，authorize 的拒绝路径漏修
-- **现象**：提示词 10 用沙盒探测发现 PAYER_CANNOT_PAY 等拒绝代码没映射，只改了 `deposit-actions.ts` 的 DECLINE_ISSUES；`deposits.ts` 里同名集合没动，authorize 被 TRANSACTION_REFUSED / PAYER_CANNOT_PAY 拒绝时成了 paypal_error，被拒订单继续复用（审查 R1）。
-- **根因**：没验证——探测只跑了 capture、void、reauthorize、refund，authorize 没探；改映射前也没搜同名常量，默认它只有一份。
-- **修复**：`lib/paypal/deposits.ts` 补上两个代码；`tests/paypal/negative-paths.test.ts` 断言 declined、orderSpent 且下一次新建订单，沙盒表同步；突变确认撤回后 2 个用例失败。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-009 · 2026-10-30 · A mapping table existed twice, only one copy was changed, and authorize's decline path was missed
+- **Symptom**: Prompt 10's sandbox probing found decline codes such as PAYER_CANNOT_PAY were not mapped; only DECLINE_ISSUES in `deposit-actions.ts` was changed. The set with the same name in `deposits.ts` was not, so when authorize was declined with TRANSACTION_REFUSED / PAYER_CANNOT_PAY it became paypal_error and the declined order kept being reused (review R1).
+- **Root cause**: Not verified: probing only covered capture, void, reauthorize and refund, not authorize; and before changing the mapping nobody searched for constants with the same name, assuming there was only one.
+- **Fix**: Added both codes to `lib/paypal/deposits.ts`; `tests/paypal/negative-paths.test.ts` asserts declined, orderSpent and a new order on the next try, and the sandbox table was updated to match; with the fix reverted, 2 tests fail.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-010 · 2026-10-31 · 重放幂等请求时把网关层拒绝当成"没发生"，下一次换新 id 可能重复扣款
-- **现象**：提示词 11 审计发现，超过 PayPal 保留期（Orders 6 小时）后重放钱包扣款会变成新扣款；408/409 也被当成确定失败。修这两处时又漏了一层：重放收到 429/401 仍清掉 pending、换新 id（审查 R1）。修好后 authorize 重放没有终点，预约会卡死（N1）。
-- **根因**：错误假设——把"4xx = 什么都没发生"用在了重放上。这个回答只说明这次重放被拒，不能说明首次发送的结果；幂等键的保留期也从没检查过。
-- **修复**：`isDefiniteRefusal(failure, replay)`：重放时只有 422 才算结清；money action 按保留期设重放窗口（5 小时 / 44 天），authorize 同样 5 小时，超窗转人工；三类修复都用突变确认。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-010 · 2026-10-31 · A gateway refusal on an idempotent replay was taken as "nothing happened", so the next try with a new id could charge twice
+- **Symptom**: Prompt 11's audit found that replaying a wallet charge after PayPal's retention period (6 hours on Orders) becomes a new charge, and that 408/409 were treated as definite failures. Fixing those missed another layer: a replay answered with 429/401 still cleared the pending action and switched to a new id (review R1). After that fix, authorize replays had no end, and a booking could get stuck (N1).
+- **Root cause**: Wrong assumption: "4xx = nothing happened" was applied to replays. That answer only says this replay was refused, not what happened to the first send; the idempotency key's retention period was never checked either.
+- **Fix**: `isDefiniteRefusal(failure, replay)`: on a replay only a 422 counts as settled; money actions get replay windows from the retention periods (5 hours / 44 days), authorize likewise 5 hours, and past the window the booking goes to manual review; all three fixes were mutation-checked.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-011 · 2026-10-31 · 用 mock 证明生命周期行为，真实进程里却不成立
-- **现象**：持久化第一版的 SIGTERM flush 只用 mock 调 handler 验证，裁判在真实 `next start` 上探测到 Next 先 `exit(143)`，flush 根本没跑完（R3a）。同一轮还有两条测试撤掉修复后依然通过：名字校验用例的日期本身就会被拒，竞态用例没落进微任务空窗；一条写不进 jsonb 的记录则能堵死整个写队列（R1）。
-- **根因**：没验证——测的是"我调用 handler 时它做了什么"，不是"平台停进程时发生了什么"；写队列也没问过"如果队首永远写不进去会怎样"。
-- **修复**：`NEXT_MANUAL_SIG_HANDLE` 接管信号，等锁和写入后再退出；用真实 `next start` 对照（无开关 143/4 ms，有开关 0/3050 ms）；永久错误出队、入口拒绝不可存字符；两条摆设测试重写并突变确认。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-011 · 2026-10-31 · Lifecycle behaviour was proved with mocks and did not hold in a real process
+- **Symptom**: The first version of persistence only checked the SIGTERM flush by calling the handler with mocks; the referee probed a real `next start` and Next exited with 143 first, so the flush never finished (R3a). In the same round two more tests still passed with their fixes removed: the name-check test used a date that was rejected anyway, and the race test never landed in the microtask gap. A record that could not be written to jsonb could block the whole write queue (R1).
+- **Root cause**: Not verified: the tests checked "what the handler does when I call it", not "what happens when the platform stops the process"; and nobody asked "what if the head of the write queue can never be written?"
+- **Fix**: `NEXT_MANUAL_SIG_HANDLE` takes over signals, and the process exits after locks and writes finish; compared on a real `next start` (without the flag 143 / 4 ms, with it 0 / 3050 ms); permanent errors leave the queue, and the entry point rejects characters that cannot be stored; the two decorative tests were rewritten and mutation-checked.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-012 · 2026-10-31 · 版本校验比对的是"最后见到的版本"，而不是"这次保存基于的版本"
-- **现象**：第一版版本校验 554 个测试全绿，裁判用真实 SQL 复现了三条静默覆盖路径：流程读取后轮询推进了版本，旧数据校验通过；排队的第二次保存在冲突后继续写入；conflict 记录写失败后带新版本重试成功。另有缺迁移导致服务起不来，以及内容比对把自己的写入误判成冲突（R1-R5）。
-- **根因**：错误假设——把乐观锁当成"给写入加个 WHERE"，没有追问版本号是在哪一刻绑定到数据上的；测试只覆盖"过期写入来了"的基本场景，每次也是先让它通过。
-- **修复**：持锁期间钉住记录（拿锁重读、解锁补齐），用 writer id 判断自己的写入，冲突时作废全部排队保存，败方落库后才推进版本；加迁移和触发器；突变又抓到 3 条摆设测试并重写。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-012 · 2026-10-31 · The version check compared against "the last version seen", not "the version this save is based on"
+- **Symptom**: The first version check passed all 554 tests, and the referee reproduced three silent-overwrite paths with real SQL: after a flow read a record, polling advanced the version, so stale data passed the check; a queued second save kept writing after a conflict; and after writing the conflict record failed, a retry with the new version succeeded. A missing migration also stopped the service from starting, and content comparison mistook our own writes for conflicts (R1-R5).
+- **Root cause**: Wrong assumption: optimistic locking was treated as "add a WHERE to the write", without asking at which moment the version number is bound to the data; tests only covered the basic "a stale write arrives" case, and each was first made to pass.
+- **Fix**: Records are pinned while a lock is held (re-read on taking the lock, caught up on release); writer ids tell our own writes apart; on a conflict every queued save is dropped, and the version only advances after the losing write is stored; added a migration and a trigger; mutation checks caught 3 more decorative tests, which were rewritten.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-013 · 2026-10-31 · 本机构建通过就算过，线上内存超限连败三次，还说错了线上状态
-- **现象**：加入 Bryntum 后 `next build` 在 Render 三次都因内存超过 8GB 失败。我没去看部署结果，还告诉用户"Blueprint 没同步，线上没有数据库"，而用户的控制台显示数据库已由推送自动创建，线上一直停在旧版 69fbb41。
-- **根因**：没验证——本机 32GB 内存掩盖了 Turbopack 21GB 的峰值，我只看退出码；对线上状态的判断来自推测，而不是平台记录。
-- **修复**：`npm run build` 改用 webpack，干净构建峰值 3.28GB；在生产模式下实际验证了看板、SSE、MCP 和数据库失败退出。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-013 · 2026-10-31 · A local build passing was taken as done; the live build ran out of memory three times, and live state was misreported
+- **Symptom**: After Bryntum was added, `next build` failed on Render three times with memory over 8 GB. I did not look at the deploy results, and told the user "the Blueprint did not sync, there is no database live", while the user's dashboard showed the database had been created automatically on push and the live service was still on the old 69fbb41.
+- **Root cause**: Not verified: the local machine's 32 GB of memory hid Turbopack's 21 GB peak, and only the exit code was checked; the statement about live state came from guessing, not from the platform's records.
+- **Fix**: `npm run build` uses webpack, with a clean-build peak of 3.28 GB; the board, SSE, MCP and the exit on database failure were checked in production mode.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-### F-014 · 2026-11-04 · 提交文案里把"读取"当成"功能"，三处写过头
-- **现象**：写 README 和 Devpost 文案后，裁判核对出三处与代码不符：说"预订页时间是 UTC"（输入框其实用浏览器本地时间，只有确认页显示 UTC）、说"填 nickname"（表单字段叫 Your name）、说发薪包含小费（`tipCents` 只有读取点，没有任何写入，永远是 0；而我自己在 What's next 里又把小费列为待做，前后矛盾）。
-- **根因**：没验证——凭记忆和读过的局部代码（`toUTCString`、`tipCents ?? 0`、store.ts 的注释）写功能描述，没有回到表单和写入点逐条核对；面向评委的文案夸大会直接扣分。
-- **修复**：三处改成与代码一致的说法；用 grep 确认 `tipCents` 无写入点，README 和 devpost 里 tip、UTC、nickname 的所有出现处都已核对。
-- **规则去向**：全局 ~/.claude/CLAUDE.md
-- **复发记录**：无
+### F-014 · 2026-11-04 · Submission copy treated "reads" as "features" and overclaimed in three places
+- **Symptom**: After the README and Devpost copy were written, the referee found three claims that did not match the code: "booking page times are UTC" (the input actually uses the browser's local time; only the confirmation page shows UTC), "enter a nickname" (the form field is called Your name), and payouts include tips (`tipCents` is only read, never written, so it is always 0; and I had listed tips as to-do under What's next, contradicting myself).
+- **Root cause**: Not verified: feature descriptions were written from memory and from partial code that was read (`toUTCString`, `tipCents ?? 0`, a comment in store.ts), without going back to the form and the write points to check each one; overclaiming in copy for judges costs points directly.
+- **Fix**: All three now match the code; grep confirmed `tipCents` has no write point, and every mention of tip, UTC and nickname in the README and devpost was checked.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
 
-## 精简记录
+## Pruning log
 
-| 日期 | 动作（删除 / 合并 / 自动化 / 升级为全局） | 涉及条目 | 说明 |
+| Date | Action (delete / merge / automate / promote to global) | Entries | Notes |
 | --- | --- | --- | --- |

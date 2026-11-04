@@ -95,7 +95,7 @@ test('pre-commit：账本规则缺少出处时拦截', () => {
   write('CLAUDE.md', `${LEDGER}- **[2026-10-20] 无出处**：随手写的规则。\n`);
   const r = commit(['CLAUDE.md'], 'bad rule');
   assert.ok(!r.ok);
-  assert.match(r.out, /F-编号/);
+  assert.match(r.out, /has no F-number/);
   write('CLAUDE.md', LEDGER);
   mustGit(['add', 'CLAUDE.md']);
 });

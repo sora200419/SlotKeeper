@@ -1,56 +1,56 @@
 ---
 name: harness-review
-description: 交付前的裁判审查。完成代码编写、重构或修复之后、宣布完成或提交之前使用：调用独立子代理 harness-reviewer 审查改动，对每个问题执行"改或拿证据"，直到没有阻断问题。用户说"审查一下 / review / 找个裁判看看"时也使用。
+description: Referee review before delivery. Use after writing, refactoring or fixing code, before declaring it done or committing. Calls the independent subagent harness-reviewer to review the change, and handles every issue with "fix it or show evidence" until no blocking issue is left. Also use when the user says "review this", "review", or "get a referee to look at it".
 ---
 
-# 裁判审查（改或拿证据）
+# Referee review (fix it or show evidence)
 
-不要自己给自己判卷。审查必须交给独立子代理，在全新上下文里进行。
+Do not grade your own work. The review must go to an independent subagent, in a fresh context.
 
-## 1. 准备审查范围
+## 1. Prepare the review scope
 
-- 改动范围：`git status` + `git diff`（已暂存的加 `git diff --cached`）；非 git 项目则列出改动的文件。
-- 任务目标：用户原话或一句话概括。
-- 测试命令：取自项目 `CLAUDE.md` 的「常用命令」。
+- Change scope: `git status` + `git diff` (add `git diff --cached` for staged changes); outside git, list the changed files.
+- Task goal: the user's own words, or a one-sentence summary.
+- Test command: from "Common Commands" in the project `CLAUDE.md`.
 
-## 2. 首轮审查
+## 2. First review
 
-用 Agent 工具调用 `harness-reviewer` 子代理，prompt 只包含：任务目标、改动范围（文件清单或 diff 命令）、测试命令。
+Call the `harness-reviewer` subagent with the Agent tool. The prompt contains only: the task goal, the change scope (file list or diff command), and the test command.
 
-**不要**附上你对代码质量的自评或"我已经检查过 X"之类的话——那会污染裁判的判断。
+**Do not** add your own view of the code's quality or phrases like "I already checked X"; that biases the referee.
 
-## 3. 逐条处理：改或拿证据
+## 3. Handle each issue: fix it or show evidence
 
-对每个 `阻断` / `重要` 问题，二选一：
+For every `Blocking` / `Important` issue, choose one:
 
-| 处理 | 要求 |
+| Response | Requirement |
 | --- | --- |
-| **修复** | 改代码；补上覆盖该问题的测试；运行关闭条件里的命令并保留输出 |
-| **拿证据反驳** | 写一个能复现该场景的自动化测试，证明行为正确；附命令和通过输出 |
+| **Fix** | Change the code; add a test covering the issue; run the closing-condition command and keep its output |
+| **Refute with evidence** | Write an automated test that reproduces the scenario and shows the behaviour is correct; attach the command and its passing output |
 
-明令禁止：
-- 无证据地声明"这不是问题""已经处理了"
-- 删除 / 弱化测试、加 skip、修改期望值来让测试变绿
-- 跳过测试直接进入下一步
+Never:
+- Declare "this is not an issue" or "already handled" without evidence
+- Delete or weaken tests, add skips, or change expected values to make tests pass
+- Skip the tests and move on
 
-`建议` 级问题可以不改，但要在汇报里列出并说明理由。
+`Suggestion` issues may be left unchanged, but list them in the report with the reason.
 
-## 4. 复核
+## 4. Re-review
 
-再次调用 `harness-reviewer`（新调用，复核模式），提供：上一轮问题表 + 每条的处理方式 + 证据命令。由裁判亲自重跑命令核验。
+Call `harness-reviewer` again (a new call, in re-review mode) with: the previous issue table + how each item was handled + the evidence commands. The referee reruns the commands itself.
 
-- 结论为 PASS → 进入第 5 步。
-- 仍有阻断问题 → 回到第 3 步。**最多 3 轮**；第 3 轮仍未通过，停下来向用户报告分歧，由用户裁决。
+- Verdict PASS → go to step 5.
+- Blocking issues remain → back to step 3. **At most 3 rounds**; if round 3 still fails, stop and report the disagreement to the user, who decides.
 
-## 5. 向用户汇报
+## 5. Report to the user
 
 ```
-## 审查结果：PASS（共 N 轮）
+## Review result: PASS (N rounds)
 
-| ID | 严重度 | 问题 | 处理 | 证据 |
+| ID | Severity | Issue | Handling | Evidence |
 | --- | --- | --- | --- | --- |
-| R1 | 阻断 | … | 已修复 | `npm test` → 42 passed |
-| R2 | 建议 | … | 未采纳 | 理由 |
+| R1 | Blocking | … | Fixed | `npm test` → 42 passed |
+| R2 | Suggestion | … | Not adopted | reason |
 ```
 
-如果某个阻断问题属于"换个场景还会再犯"的类型，审查结束后执行 `harness-postmortem` 入账。
+If a blocking issue is the kind that "would happen again in another situation", run `harness-postmortem` to log it after the review.

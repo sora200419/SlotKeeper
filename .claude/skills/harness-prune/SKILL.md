@@ -1,46 +1,46 @@
 ---
 name: harness-prune
-description: 定期精简 Harness 账本（建议每 1–2 个月一次）：逐条追问"这条规则防的是哪次真实翻车"，把规则合并、自动化、升级为全局或删除，防止 CLAUDE.md 膨胀导致模型忽略重点。仅在用户要求时运行。
+description: Periodically trim the harness ledgers (about every 1–2 months). For each rule, ask "which real mishap does this prevent?", then merge, automate, promote to global, or delete rules, so CLAUDE.md does not bloat until the model ignores what matters. Run only when the user asks.
 disable-model-invocation: true
 ---
 
-# 账本精简（Prune）
+# Ledger pruning
 
-目标：让账本保持短而有效。规则越多，模型越容易忽略真正重要的那几条。
+Goal: keep the ledgers short and effective. The more rules there are, the more easily the model ignores the few that really matter.
 
-## 1. 体检
+## 1. Check
 
 ```
 node .claude/harness/lint.js
 node .claude/harness/lint.js --global
 ```
 
-项目里没有 `.claude/harness/lint.js` 时，改用全局副本 `~/.claude/hooks/harness/lint.js`。记下规则数、超长 / 超龄 / 缺出处的条目。
+If the project has no `.claude/harness/lint.js`, use the global copy `~/.claude/hooks/harness/lint.js`. Note the rule counts and any entries that are too long, too old, or missing a source.
 
-## 2. 逐条审查
+## 2. Review each rule
 
-对项目 `CLAUDE.md`《错题与防范规程》和 `~/.claude/CLAUDE.md`《全局错题集》的每一条，回答：
+For every rule in the project `CLAUDE.md` "Mishaps and Prevention Rules" and in the global ledger of `~/.claude/CLAUDE.md`, answer:
 
-1. **它防的是哪次真实翻车？** 找不到 F-编号或出处 → 候选**删除**。
-2. **那个问题还可能发生吗？** 底层代码已重构、依赖已升级、模型已不再犯（近期无复发记录）→ 候选**删除**。
-3. **能交给机器检查吗？** 可以写成 Hook 规则、lint、测试、类型约束 → 候选**自动化**（实现后从 Prompt 移除）。
-4. **和别的规则是同一类吗？** 多条针对具体小 bug 的规则 → 候选**合并**为一条更通用的原则。
-5. **在别的项目也会犯吗？** 项目账本里的通用教训 → 候选**升级为全局**；全局账本里只适用于个别项目的 → 候选**降级**到该项目。
+1. **Which real mishap does it prevent?** No F-number or source → candidate for **deletion**.
+2. **Can that problem still happen?** The underlying code was refactored, the dependency upgraded, or the model no longer makes the mistake (no recent recurrence) → candidate for **deletion**.
+3. **Can a machine check it?** It can become a hook rule, lint, a test or a type constraint → candidate for **automation** (remove it from the prompt once implemented).
+4. **Is it the same kind as another rule?** Several rules about specific small bugs → candidate for **merging** into one more general principle.
+5. **Would other projects hit it too?** A general lesson in a project ledger → candidate for **promotion to global**; a global rule that only applies to one project → candidate for **demotion** to that project.
 
-## 3. 出方案，等用户拍板
+## 3. Propose, and wait for the user's decision
 
-用表格列出所有候选动作，**用户确认之前不改任何账本**：
+List every candidate action in a table; **do not change any ledger before the user confirms**:
 
-| 规则 | 动作 | 理由 | 替代方案（自动化的实现位置 / 合并后的新文本） |
+| Rule | Action | Reason | Replacement (where the automation lives / the merged text) |
 | --- | --- | --- | --- |
 
-## 4. 执行
+## 4. Carry it out
 
-- 按确认的方案修改账本；需要自动化的，先实现并跑通测试（`node --test ".claude/harness/tests/*.test.js"`），再删除对应规则行。
-- 删除的规则不丢失：其 FAILURES.md 条目保留，并在「规则去向」注明 `已删除（YYYY-MM-DD 精简）` 或 `已自动化为 <路径>`。
-- 在 FAILURES.md 的「精简记录」表追加一行。
-- 再跑一次第 1 步的体检，确认无错误。
+- Change the ledgers as agreed; for automation, implement it and get the tests passing first (`node --test ".claude/harness/tests/*.test.js"`), then delete the rule line.
+- Deleted rules are not lost: their FAILURES.md entry stays, with "Rule destination" noting `deleted (pruned YYYY-MM-DD)` or `automated as <path>`.
+- Add a row to the "Pruning log" table in FAILURES.md.
+- Run the step 1 check again and confirm there are no errors.
 
-## 5. 汇报
+## 5. Report
 
-精简前后的规则数（项目 / 全局）、每类动作的数量、新增的自动化检查。
+Rule counts before and after (project / global), how many of each action, and any new automated checks.
