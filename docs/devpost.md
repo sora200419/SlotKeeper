@@ -93,11 +93,11 @@ Paste this into the Devpost testing field. It repeats the README's "Try it (for 
 
 > **Needs:** a PayPal sandbox personal account (yours, from developer.paypal.com > Testing tools > Sandbox accounts). No credentials of ours are needed to book. Everything is sandbox; no real money moves. Bookings are shared, so use a nickname.
 >
-> 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the "Your name" field and choose a time within the next 3 days (PayPal holds an authorization for 3 days). The time box uses your browser's local time; the confirmation page shows UTC.
+> 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the "Your name" field and choose a time within the next 3 days (PayPal guarantees a held deposit can be captured for 3 days; the later "valid until" date on the confirmation page is PayPal's expiry of the authorization itself). The time box is shop time (Los Angeles), wherever you are; the confirmation page shows the same time and zone.
 > 2. Click "Book and hold deposit" and pay with the PayPal button using your sandbox personal account. The page shows "Deposit held" and the PayPal authorization id.
-> 3. Staff screens need a token: **[STAFF TOKEN, or say how to get one]**. Open https://slotkeeper-93dy.onrender.com/staff, enter it, and your booking is on the board.
+> 3. Staff screens need a token: **[STAFF TOKEN: type the judging token here in the Devpost field only; never commit it to this repo]**. Open https://slotkeeper-93dy.onrender.com/staff, enter it, and your booking is on the board.
 > 4. Click your booking on the board. The "Booking" tab shows its deposit and only the actions it allows right now: "Capture $…" (the whole deposit), "Charge no-show fee" (any amount up to the deposit; the rest of the hold is released), "Release hold", and afterwards "Refund". Each asks for confirmation. The board shows the result at once and again when PayPal's webhook confirms it. The same actions are API routes; see the README, "Try it (for judges)".
-> 5. In the copilot panel on /staff, describe a change, such as "Cancel Ana's booking and release her deposit". Review the plan previewed on the schedule, press "Approve and run", then open the "Audit log" tab. **[Only if the copilot has an API key and budget during judging.]**
+> 5. In the copilot panel on /staff, describe a change, such as "Cancel Ana's booking and release her deposit". Review the plan previewed on the schedule, press "Approve and run", then open the "Audit log" tab. The copilot takes a limited number of requests per 24 hours across all users; if it says it is limited to N requests per 24 hours, please try again later. Each request is answered on its own, so write the whole request each time.
 > 6. MCP: connect an MCP client to https://slotkeeper-93dy.onrender.com/api/mcp (Streamable HTTP) and use `search_slots`, `hold_slot`, `create_deposit`.
 
 ## GitHub repository "About" (set by hand in the repo settings)
@@ -108,8 +108,8 @@ Paste this into the Devpost testing field. It repeats the README's "Try it (for 
 
 ## Before submitting: things this text depends on
 
-1. **Staff token for judges:** the organizers said both "don't share credentials" and, in the Devpost rules, that testing credentials may go in the testing field. Decide what to hand out; the token also allows sandbox capture, refund and payout.
-2. **Copilot needs an API key, a spending cap, and one real run.** Until that run, the copilot has only been exercised with a scripted model in tests and in the browser.
-3. **MCP with a real assistant:** the protocol handshake and the tool list have been checked on the live server, and the booking flow in unit tests. Whether PayPal returns the approval link for an order created with `return=minimal` has not been confirmed live.
+1. **Staff token for judges: decided 2026-11-05, give it.** Put a fresh STAFF_API_TOKEN, made only for judging, in the Devpost testing field and nowhere else (not in this repo, the README or the video). It allows sandbox capture, refund, payout and copilot use. Copilot requests are capped by COPILOT_DAILY_LIMIT, but that count is kept in memory and restarts with every deploy, so it does not cap spend: set a spending cap on the Anthropic account before handing out the token. Rotate the token after judging ends on 12-15.
+2. **Copilot:** it has an API key, a daily request cap, and live runs on Render (11-05: a move plan and a void plan, approved and audited). Still to confirm: a spending cap on the Anthropic account.
+3. **MCP with a real assistant: checked live on 2026-11-05** with Claude Code as the client. `hold_slot` reserved a slot, `create_deposit` returned a PayPal approval link (so the order created with `return=minimal` does carry it), the deposit was approved in the sandbox, `booking_status` then showed it held, and a lapsed hold was cancelled. The staff board showed the held booking with its money actions and the cancelled one greyed out.
 4. **Impact:** add one sourced figure about no-shows or cancellations in appointment businesses; none is stated above because none has been verified.
 5. **Video, screenshots, and the video link.**

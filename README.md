@@ -73,7 +73,7 @@ The AI parts: the owner copilot in `lib/copilot/` (Claude, plan → approve → 
 
 ## Try it (for judges)
 
-You need a **PayPal sandbox personal account** (your own, from developer.paypal.com > Testing tools > Sandbox accounts). No credentials of ours are needed to book. The time box uses your browser's local time, while the confirmation page and the report show UTC. Bookings can be at most 3 days ahead, because PayPal holds an authorization for 3 days.
+You need a **PayPal sandbox personal account** (your own, from developer.paypal.com > Testing tools > Sandbox accounts). No credentials of ours are needed to book. The time box is shop time (Los Angeles, from `BUSINESS_TIME_ZONE`) wherever you are, and the confirmation page shows that time too; the deposits report shows UTC. Bookings can be at most 3 days ahead, because PayPal only guarantees that a held deposit can be captured for 3 days (the authorization's honor period). The authorization itself stays open longer: the "valid until" on the confirmation page is PayPal's own expiry date, up to 29 days later (about four weeks in our sandbox run).
 
 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the **Your name** field (bookings are shared and shown on the staff board) and choose a time within 3 days.
 2. Click **Book and hold deposit**, then pay with the PayPal button using your sandbox personal account. The page then shows "Deposit held" with the PayPal authorization id.
@@ -88,7 +88,7 @@ You need a **PayPal sandbox personal account** (your own, from developer.paypal.
    curl -X POST .../deposit/void ... ;  curl -X POST .../deposit/refund ... -d '{}'
    ```
    The board shows the result at once, and again when PayPal's webhook confirms it.
-5. In the copilot panel on `/staff`, describe a change, for example "Cancel Ana's booking and release her deposit". The copilot proposes a plan that is previewed on the schedule; **Approve and run** executes it and the **Audit log** tab lists each step with its PayPal ids.
+5. In the copilot panel on `/staff`, describe a change, for example "Cancel Ana's booking and release her deposit". The copilot proposes a plan that is previewed on the schedule; **Approve and run** executes it and the **Audit log** tab lists each step with its PayPal ids. The copilot takes a limited number of requests per 24 hours across all users; if it says it is limited to N requests per 24 hours, please try again later. Each request is answered on its own, so write the whole request each time.
 6. MCP: point an MCP client at `https://slotkeeper-93dy.onrender.com/api/mcp` (Streamable HTTP, no authentication; each booking has its own token). Tools: `search_slots`, `hold_slot`, `create_deposit`, `cancel_booking`, `booking_status`.
 
 ## Run locally

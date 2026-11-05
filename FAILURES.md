@@ -114,6 +114,13 @@
 - **Rule destination**: global ~/.claude/CLAUDE.md
 - **Recurrences**: none
 
+### F-015 · 2026-11-05 · Four questions answered with only a summary box
+- **Symptom**: The user asked four questions (where to rotate the secrets, MCP test steps, the judge token, Bryntum). After one read-only command I called the end-of-turn wrap-up tool, whose recap said "Answered all four questions", and wrote no answer; the tool then forbade text after it, so the user received only a recap and a follow-up question.
+- **Root cause**: Wrong assumption: I treated the wrap-up recap as the reply, and called the turn-ending tool before writing the answer it summarised.
+- **Fix**: The answers were written in full in the next turn.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
+
 ## Pruning log
 
 | Date | Action (delete / merge / automate / promote to global) | Entries | Notes |

@@ -39,7 +39,7 @@
 | Third-party services / APIs | `@paypal/paypal-server-sdk` 2.5.0 (Orders, Payments, Vault, Payouts, Transaction Search, Webhooks); Anthropic API via `@anthropic-ai/sdk` (copilot, default `claude-haiku-5-5`); `@modelcontextprotocol/sdk` (MCP server) |
 | Deployment | Render Blueprint (`render.yaml`): web service `slotkeeper` (starter, oregon, 1 instance, `autoDeploy: false`) + `slotkeeper-db`. Live: https://slotkeeper-93dy.onrender.com |
 
-**Known constraints**: PayPal sandbox only; an authorization's honor period is 3 days; Render stops builds at 8 GB, so the build uses webpack (Turbopack peaked at 21 GB); `NEXT_PUBLIC_*` values are baked in at build time; local runs behind HTTPS-inspecting antivirus need `NODE_OPTIONS=--use-system-ca`.
+**Known constraints**: PayPal sandbox only; an authorization's honor period is 3 days, while the authorization itself expires up to 29 days later (about four weeks in the 11-05 sandbox run) (the PayPal expiry shown as "valid until" on /book/[id]); Render stops builds at 8 GB, so the build uses webpack (Turbopack peaked at 21 GB); `NEXT_PUBLIC_*` values are baked in at build time; local runs behind HTTPS-inspecting antivirus need `NODE_OPTIONS=--use-system-ca`.
 
 ## 5. File Structure
 ```
@@ -87,14 +87,15 @@ PayPal/
 - [x] Booking form reads the typed time as shop time in `BUSINESS_TIME_ZONE`; confirmation and hold expiry shown in shop time (11-04); deployed 11-04 (9c9e022), checked live
 - [x] Live copilot runs on Render (11-05): a move plan and a void plan proposed, approved and audited; the void entry carries the PayPal order and authorization ids
 - [x] Copilot told that void_deposit also cancels the booking (11-05); not deployed yet
+- [x] MCP checked live with Claude Code as the client (11-05): hold, create_deposit returned the approval link, sandbox approval, deposit held, lapsed hold cancelled, both shown on the board. The first two create_deposit calls got PayPal 401; they worked after the user updated the server's PayPal credentials (what changed is not recorded; see the rotate to-do)
 
 **In progress**
 - [ ] Nothing in progress.
 
 **To do (by priority)**
-- [ ] Rotate the PayPal secret and STAFF_API_TOKEN; add ANTHROPIC_API_KEY with a spending cap (Render + `.env.local`)
-- [ ] Check the "Persistence Check" booking survived a restart (it is dated 11-02, before today); MCP smoke test with a real client
-- [ ] Decide whether judges get a staff token (docs/devpost.md checklist item 1)
+- [ ] Rotate the PayPal secret and STAFF_API_TOKEN (Render + `.env.local`); set a spending cap on the Anthropic account (the API key is already on Render)
+- [ ] Check the "Persistence Check" booking survived a restart (it is dated 11-02, before today)
+- [ ] Make a fresh judging STAFF_API_TOKEN and type it into the Devpost testing field only (decided 11-05; docs/devpost.md checklist item 1)
 - [ ] Video (under 3 min), screenshots, one sourced no-show statistic
 - [ ] GitHub About fields (description, website, topics)
 - [ ] Discord questions: AI API credits; Bryntum trial validity through 12-15
@@ -105,7 +106,6 @@ PayPal/
 - The audit log shows times in the viewer's browser zone, not shop time.
 - Locally the copilot and booking form use UTC unless `.env.local` sets `BUSINESS_TIME_ZONE` (Render sets America/Los_Angeles).
 - POST /api/bookings (the /book form) does not check opening hours (9:00-18:00); only MCP slot search does. Test bookings at 18:00 and 19:00 PT exist.
-- MCP: not confirmed live that PayPal returns the approval link for an order created with `return=minimal`.
 - Bryntum trial watermark; trial validity through judging: TBC.
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.
 - The board can briefly show an older booking state if a slow action response lands after a newer live update; a Retry button stays visible on a panel left open past the replay window (the server refuses it safely).
@@ -167,6 +167,7 @@ Deploy: Render dashboard → `slotkeeper` → Manual Deploy → Deploy latest co
 | 2026-10-31 | Copilot defaults to Claude Haiku 5.5 (`COPILOT_MODEL`) | Lower cost during judging; Sonnet/Opus still selectable |
 | 2026-11-04 | Repo Markdown in English; ledger heading renamed | lint.js accepts the new heading and the older Chinese one |
 | 2026-11-04 | No PayPal agent-toolkit runtime dependency | Its tools lack authorize/void/reauthorize/Payouts/Vault; money steps stay in our tested functions |
+| 2026-11-05 | Judges get the staff token, in the Devpost testing field only | Judges must be able to try the board and copilot; it is sandbox-only, copilot requests are capped per 24 h (in memory) and an Anthropic spending cap must be set first, and the token is rotated after 12-15 |
 
 ## 15. Harness Workflow (mandatory)
 1. **Log every mishap**: after a correction or a pitfall that caused rework, fix it, then run `harness-postmortem` and write one rule of at most 2 sentences into the right ledger (global or this file).
