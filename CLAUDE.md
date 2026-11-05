@@ -33,7 +33,7 @@
 ## 4. Tech Stack
 | Layer | Choice |
 |---|---|
-| Frontend | Next.js 16.4.2 App Router, React 19.3.1, Bryntum Scheduler 7.3.7 (trial, npm alias `@bryntum/scheduler`), PayPal JS SDK v6 |
+| Frontend | Next.js 16.4.5 App Router, React 19.3.1, Bryntum Scheduler 7.3.7 (trial, npm alias `@bryntum/scheduler`), PayPal JS SDK v6 |
 | Backend | Next.js route handlers, TypeScript 5.9.3 (strict), Node 22.15 |
 | Database | Postgres on Render (`slotkeeper-db`, basic-256mb); write-through `records` table with revisions (`lib/storage/records.ts`); PGlite in tests |
 | Third-party services / APIs | `@paypal/paypal-server-sdk` 2.5.0 (Orders, Payments, Vault, Payouts, Transaction Search, Webhooks); Anthropic API via `@anthropic-ai/sdk` (copilot, default `claude-haiku-5-5`); `@modelcontextprotocol/sdk` (MCP server) |
@@ -93,6 +93,7 @@ PayPal/
 - [x] Pre-freeze polish (11-05, not deployed yet): POST /api/bookings checks the slot under the 'slots' lock like the MCP hold (opening hours, half-hour grid, free staff; no double booking; a refusal names free times that day; at most 20 unpaid web bookings block slots at once and 10 attempts per client per 10 min, else 429); price, deposit and "balance paid at the shop" on /book, /book/[id] and the board panel, and the checkout text no longer says "nothing is charged unless you miss it"; audit log in shop time; board shades closed hours and draws a shop-time "Now" line (Bryntum timeRanges)
 - [x] More pre-freeze work (11-05, not deployed yet): /book prefills the first free slot (10:00 tomorrow if free); drag to reschedule on the board via staff-only POST /api/bookings/[id]/move (moveSlotProblem under the 'slots' lock, lock order booking then slots; no drag while a plan is previewed); harness-guard.js denies multi-line inline scripts and heredocs that write files (F-001 automated)
 - [x] Security headers on every response (11-05, not deployed yet): next.config.ts sends nosniff, Referrer-Policy, X-Frame-Options DENY, a CSP with only frame-ancestors/base-uri/object-src, Permissions-Policy and HSTS, and drops X-Powered-By; no script-src CSP, so the PayPal SDK keeps working. Still to confirm on live: one sandbox approval through the PayPal popup
+- [x] Next.js 16.4.2 → 16.4.5 (11-05, not deployed yet): security release (7 moderate advisories; none found in app code by grep: no use cache, next/image, Edge runtime or forwarded fetch responses); lockfile changes only next and @next/*; npm audit 0 vulnerabilities; 730 tests pass; clean webpack build peak 3.20 GB (Render limit 8 GB)
 
 **In progress**
 - [ ] Nothing in progress.
