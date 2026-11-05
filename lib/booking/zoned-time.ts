@@ -66,6 +66,16 @@ function dateIn(now: Date, timeZone: string): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
 }
 
+/** An instant as a datetime-local value ("2026-11-05T11:00") in `timeZone`. */
+export function wallTimeIn(iso: string, timeZone: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(new Date(iso))
+      .map((p) => [p.type, p.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
 /** The form's default: tomorrow at 10:00 in the business time zone, as a datetime-local value. */
 export function defaultSlotIn(now: Date, timeZone: string): string {
   const tomorrow = new Date(Date.parse(`${dateIn(now, timeZone)}T12:00:00Z`) + DAY_MS);

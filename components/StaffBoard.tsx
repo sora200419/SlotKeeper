@@ -57,6 +57,7 @@ export function StaffBoard() {
   const [tab, setTab] = useState<'booking' | 'copilot' | 'audit'>('copilot');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [live, setLive] = useState<Live>('connecting');
+  const [moveNote, setMoveNote] = useState<string | null>(null);
   const dayRef = useRef(day);
   dayRef.current = day;
 
@@ -156,6 +157,26 @@ export function StaffBoard() {
     setData((current) => (current ? { ...current, bookings: upsertBooking(current.bookings, booking) } : current));
   }, []);
 
+  // Drag on the board: the server checks the new slot; a refusal puts the booking back and says why.
+  const handleMove = useCallback(
+    async (bookingId: string, change: { startsAt: string; staffId: string }): Promise<boolean> => {
+      try {
+        const moved = await api<BoardBooking>(`/api/bookings/${bookingId}/move`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(change),
+        });
+        handleBooking(moved);
+        setMoveNote(null);
+        return true;
+      } catch (err) {
+        setMoveNote(`Not moved: ${(err as Error).message}`);
+        return false;
+      }
+    },
+    [api, handleBooking],
+  );
+
   const events = useMemo(() => (data ? boardEvents(data.bookings, data.services, plan) : []), [data, plan]);
   const selected = data?.bookings.find((b) => b.id === selectedId);
   const resources = useMemo(() => (data ? boardResources(data.staff, events) : []), [data, events]);
@@ -208,6 +229,12 @@ export function StaffBoard() {
       </header>
 
       {error && <p role="alert" className="sk-error sk-banner">{error}</p>}
+      {moveNote && (
+        <p role="alert" className="sk-error sk-banner">
+          {moveNote}{' '}
+          <button type="button" onClick={() => setMoveNote(null)}>Dismiss</button>
+        </p>
+      )}
       {data && data.unsavedWrites > 0 && (
         <p role="alert" className="sk-error sk-banner">
           The database is behind: {data.unsavedWrites} recent change{data.unsavedWrites === 1 ? ' is' : 's are'} not saved yet and would be lost in a restart.
@@ -217,7 +244,7 @@ export function StaffBoard() {
       <main className="sk-main">
         <div className="sk-schedule">
           {data && day ? (
-            <BookingScheduler staff={resources} events={events} day={day} hours={hours} timeZone={data.timeZone} onSelect={selectBooking} />
+            <BookingScheduler staff={resources} events={events} day={day} hours={hours} timeZone={data.timeZone} onSelect={selectBooking} onMove={handleMove} />
           ) : (
             !error && <p className="sk-empty">Loading the schedule…</p>
           )}

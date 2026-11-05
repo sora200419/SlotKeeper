@@ -21,7 +21,7 @@ Small appointment businesses (salons, physio studios, tutors, groomers) live on 
 
 - A customer books a free slot and PayPal holds a deposit on their account. Nothing is charged yet. The deposit counts toward the price; the rest is paid at the shop.
 - The owner can capture the deposit when the service happened, charge a no-show fee (a partial capture, and the rest of the hold is released), void the hold, or refund, by clicking the booking on the board; each action asks for confirmation. Reauthorizing a hold is an API route and a copilot step.
-- The owner's day is a live board, coloured by deposit state, with closed hours shaded and a "Now" line in shop time. PayPal webhooks and staff actions update it as they happen.
+- The owner's day is a live board, coloured by deposit state, with closed hours shaded and a "Now" line in shop time. The owner can drag a booking to another time or staff member; the server checks the new slot and a held deposit stays held. PayPal webhooks and staff actions update it as they happen.
 - The owner types what changed ("Maria is sick tomorrow, move her clients to Ken"). Claude reads the bookings with read-only tools and proposes a plan. The plan is previewed on the schedule before anything runs, checked in code, and executed only after the owner approves. Each step is written to an audit log with its PayPal ids.
 - A customer's AI assistant can book through our MCP server. It reserves a slot and gets a PayPal approval link; the customer approves the deposit in PayPal. The assistant never moves money.
 - Customers can opt in to save their PayPal wallet so a no-show fee can be charged later, once, without them present.

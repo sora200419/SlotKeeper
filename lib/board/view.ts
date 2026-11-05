@@ -3,6 +3,7 @@
  * talks to the server: bookings and plans arrive as JSON from the staff API.
  */
 import { REPLAY_WINDOW_MS } from '@/lib/booking/replay-windows';
+import { zonedWallTimeToUtc } from '@/lib/booking/zoned-time';
 
 export type BookingStatus =
   | 'awaiting_deposit'
@@ -105,8 +106,22 @@ export interface BoardEvent {
   ghost?: boolean;
   /** The booking an open plan would move away from here. */
   movingAway?: boolean;
-  draggable: false;
+  /** Staff can drag it to another time or staff member (the server checks the slot). */
+  draggable: boolean;
   resizable: false;
+}
+
+/** Same statuses the server lets move (MOVABLE in lib/booking/bookings.ts). */
+export const MOVABLE_STATUSES: ReadonlySet<BookingStatus> = new Set(['awaiting_deposit', 'deposit_held', 'deposit_pending', 'deposit_needs_review']);
+
+/**
+ * Where a drop on the board puts a booking: the scheduler hands back a local Date holding the shop's
+ * wall-clock time (see wallClock), which becomes a UTC instant in the shop zone again.
+ */
+export function dropToMove(startDate: Date, resourceId: string, timeZone: string): { startsAt: string; staffId: string } {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const wall = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())}T${pad(startDate.getHours())}:${pad(startDate.getMinutes())}`;
+  return { startsAt: zonedWallTimeToUtc(wall, timeZone), staffId: resourceId };
 }
 
 /** Same rule as the payment layer: failed and cancelled refunds gave nothing back. */
@@ -390,7 +405,7 @@ export function bookingEvent(booking: BoardBooking, services: BoardService[]): B
     moneyLabel: money.label,
     amount: amountFor(booking),
     viaAgent: booking.source === 'agent',
-    draggable: false,
+    draggable: MOVABLE_STATUSES.has(booking.status),
     resizable: false,
   };
 }
@@ -518,7 +533,8 @@ export function boardEvents(bookings: BoardBooking[], services: BoardService[], 
   }
   // The money note also belongs on the ghost: that is where the owner's eye goes.
   for (const [id, ghost] of ghosts) ghost.planNote = events.get(id)?.planNote;
-  return [...events.values(), ...ghosts.values()];
+  // While a plan is previewed nothing is dragged: a hand move would make the preview wrong.
+  return [...events.values(), ...ghosts.values()].map((event) => ({ ...event, draggable: false }));
 }
 
 /** Staff rows: the team, plus "Unassigned" only while some booking needs it. */

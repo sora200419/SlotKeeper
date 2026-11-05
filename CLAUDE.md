@@ -91,6 +91,7 @@ PayPal/
 - [x] Secrets rotated (11-05): new PayPal secret on Render and in `.env.local`; new STAFF_API_TOKEN on Render, made for judging and checked on the live /staff (value kept only on Render and, at submission, in Devpost); Anthropic spend capped by $5 prepaid credit with auto-reload off
 - [x] Customer pages redesigned (11-05): landing page, /book and /book/[id] share `components/SiteShell.tsx` and `app/site.css` (scoped under `.sk-site`, board colours); no logic changes; deployed and checked live 11-05 (a card paragraph-spacing fix is not deployed yet)
 - [x] Pre-freeze polish (11-05, not deployed yet): POST /api/bookings checks the slot under the 'slots' lock like the MCP hold (opening hours, half-hour grid, free staff; no double booking; a refusal names free times that day; at most 20 unpaid web bookings block slots at once and 10 attempts per client per 10 min, else 429); price, deposit and "balance paid at the shop" on /book, /book/[id] and the board panel, and the checkout text no longer says "nothing is charged unless you miss it"; audit log in shop time; board shades closed hours and draws a shop-time "Now" line (Bryntum timeRanges)
+- [x] More pre-freeze work (11-05, not deployed yet): /book prefills the first free slot (10:00 tomorrow if free); drag to reschedule on the board via staff-only POST /api/bookings/[id]/move (moveSlotProblem under the 'slots' lock, lock order booking then slots; no drag while a plan is previewed); harness-guard.js denies multi-line inline scripts and heredocs that write files (F-001 automated)
 
 **In progress**
 - [ ] Nothing in progress.
@@ -101,7 +102,7 @@ PayPal/
 - [ ] At submission: type the Render STAFF_API_TOKEN (the judging token) into the Devpost testing field only (docs/devpost.md checklist item 1)
 - [ ] Video (under 3 min), screenshots, one sourced no-show statistic
 - [ ] GitHub About fields (description, website, topics)
-- [ ] Discord questions: AI API credits; Bryntum trial validity through 12-15
+- [ ] Discord question: AI API credits. Bryntum answered on Discord (11-05): from v8.0 (releasing this week) a 45-day trial can be renewed with a new key. Still to check how that applies to our npm trial package 7.3.7 (no key); do not upgrade before the freeze
 - [ ] Submit on Devpost by 11-11
 
 **Known issues**
@@ -109,8 +110,9 @@ PayPal/
 - Locally the copilot and booking form use UTC unless `.env.local` sets `BUSINESS_TIME_ZONE` (Render sets America/Los_Angeles).
 - Older test bookings at 18:00 and 19:00 PT exist (made before /book checked opening hours).
 - Only the deposit goes through PayPal; the balance is paid at the shop and not recorded. Commission is on PayPal-collected money only. Invoicing for balance and tips is What's next.
-- Bryntum trial watermark; trial validity through judging: TBC.
+- Bryntum trial watermark. Trial validity through judging: Bryntum says v8.0 trials are renewable with a new key; how that applies to the 7.3.7 npm trial package is TBC.
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.
+- Copilot move steps do not check the slot when they run (only the plan is validated): a booking dragged in another tab while a plan is open can end up overlapping it. Bookings that start within 30 minutes look draggable but every drop is refused.
 - The board can briefly show an older booking state if a slow action response lands after a newer live update; a Retry button stays visible on a panel left open past the replay window (the server refuses it safely).
 - Payouts carry a tip field, but nothing creates tips yet.
 

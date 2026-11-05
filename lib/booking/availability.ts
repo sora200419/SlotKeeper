@@ -125,3 +125,47 @@ export function freeStaffFor(store: BookingStore, serviceId: string, startsAt: s
   const day = businessDay(new Date(ms), timeZone);
   return searchSlots(store.list(), serviceId, day, timeZone, now).find((s) => Date.parse(s.startsAt) === ms)?.staffId;
 }
+
+/**
+ * Why `booking` can't move to `staffId` at `startsAt`, or undefined if it can: the staff member must do
+ * the service and be free then (opening hours, half-hour grid, no overlap), ignoring the booking itself.
+ * Used by the staff board's drag-to-reschedule; the copilot's moves are checked by its plan validation.
+ */
+export function moveSlotProblem(
+  store: BookingStore,
+  booking: Booking,
+  staffId: string,
+  startsAt: string,
+  timeZone: string,
+  now: Date,
+): string | undefined {
+  if (!staffFor(booking.serviceId).includes(staffId)) {
+    const service = findService(booking.serviceId)?.name ?? booking.serviceId;
+    return `That staff member does not do ${service}.`;
+  }
+  const ms = Date.parse(startsAt);
+  if (Number.isNaN(ms)) return 'startsAt must be an ISO 8601 date-time.';
+  const others = store.list().filter((b) => b.id !== booking.id);
+  const day = businessDay(new Date(ms), timeZone);
+  const free = searchSlots(others, booking.serviceId, day, timeZone, now).some((s) => s.staffId === staffId && Date.parse(s.startsAt) === ms);
+  return free
+    ? undefined
+    : 'That time is not free: pick a time on the hour or half hour, within opening hours (9:00-18:00 shop time), at least 30 minutes from now, that does not overlap another booking.';
+}
+
+/**
+ * The first free start time for a service at or after `from` (an ISO instant), searching that business
+ * day and the following ones up to the booking window. Undefined if nothing is free.
+ */
+export function firstFreeSlotFrom(store: BookingStore, serviceId: string, from: string, timeZone: string, now: Date): string | undefined {
+  const fromMs = Date.parse(from);
+  if (Number.isNaN(fromMs)) return undefined;
+  const bookings = store.list();
+  const firstDay = businessDay(new Date(fromMs), timeZone);
+  for (let i = 0; i <= MAX_DAYS_AHEAD + 1; i++) {
+    const day = new Date(Date.parse(`${firstDay}T12:00:00Z`) + i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    const slot = searchSlots(bookings, serviceId, day, timeZone, now).find((s) => Date.parse(s.startsAt) >= fromMs);
+    if (slot) return slot.startsAt;
+  }
+  return undefined;
+}

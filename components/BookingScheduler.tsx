@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Scheduler, EventModel } from '@bryntum/scheduler';
-import { boardTimeRanges, wallClock, type BoardEvent, type BoardStaff } from '@/lib/board/view';
+import { boardTimeRanges, dropToMove, wallClock, type BoardEvent, type BoardStaff } from '@/lib/board/view';
 
 interface Props {
   staff: BoardStaff[];
@@ -12,6 +12,8 @@ interface Props {
   timeZone: string;
   /** A booking was clicked; a plan's ghost selects the booking it previews. */
   onSelect?: (bookingId: string) => void;
+  /** A booking was dropped somewhere else; resolves false to put it back (the server refused). */
+  onMove?: (bookingId: string, change: { startsAt: string; staffId: string }) => Promise<boolean>;
 }
 
 /** The scheduler works in local dates, and events reach it as business wall-clock time (wallClock). */
@@ -21,6 +23,16 @@ function span(day: string, hours: Props['hours']): { startDate: Date; endDate: D
 }
 
 const custom = (event: EventModel) => event as EventModel & BoardEvent;
+
+/** The parts of Bryntum's beforeEventDropFinalize context used here. */
+interface DropContext {
+  valid: boolean;
+  async: boolean;
+  eventRecord: EventModel;
+  newResource?: { id: string | number };
+  startDate: Date;
+  finalize: (ok: boolean) => void;
+}
 
 /** Plain text through DomConfig, never HTML: customer names are typed by customers. */
 function renderEvent({ eventRecord, renderData }: { eventRecord: EventModel; renderData: { cls: unknown } }) {
@@ -42,12 +54,12 @@ function renderEvent({ eventRecord, renderData }: { eventRecord: EventModel; ren
 }
 
 /** The Bryntum Scheduler. It keeps its own store, so changes are applied to records, which animate. */
-export function BookingScheduler({ staff, events, day, hours, timeZone, onSelect }: Props) {
+export function BookingScheduler({ staff, events, day, hours, timeZone, onSelect, onMove }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const scheduler = useRef<Scheduler | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const latest = useRef({ staff, events, day, hours, onSelect });
-  latest.current = { staff, events, day, hours, onSelect };
+  const latest = useRef({ staff, events, day, hours, onSelect, onMove });
+  latest.current = { staff, events, day, hours, onSelect, onMove };
 
   const applyEvents = (instance: Scheduler, next: BoardEvent[]) => {
     const store = instance.eventStore;
@@ -81,8 +93,14 @@ export function BookingScheduler({ staff, events, day, hours, timeZone, onSelect
         created = new SchedulerClass({
           appendTo: host.current,
           height: '100%',
-          readOnly: true,
+          // Not read-only so bookings can be dragged (only those whose event has draggable: true);
+          // every other way of editing is switched off in `features` below.
+          readOnly: false,
+          // Not read-only also enables Delete/Backspace removal; bookings are never removed on the board.
+          enableDeleteKey: false,
           viewPreset: 'hourAndDay',
+          // Drops snap to the half-hour grid that bookings use.
+          timeResolution: { unit: 'minute', increment: 30 },
           // The whole working day on one screen: a ghost must never land out of view.
           forceFit: true,
           ...span(latest.current.day, latest.current.hours),
@@ -99,8 +117,30 @@ export function BookingScheduler({ staff, events, day, hours, timeZone, onSelect
           onEventClick: ({ eventRecord }: { eventRecord: EventModel }) => {
             latest.current.onSelect?.(String(eventRecord.id).replace(/^ghost-/, ''));
           },
+          // The server decides: the drop waits for the move request and is undone if it is refused.
+          onBeforeEventDropFinalize: (({ context }: { context: DropContext }) => {
+            if (!context.valid) return; // Bryntum puts an invalid drop back itself
+            const move = latest.current.onMove;
+            context.async = true;
+            // No handler means no server move: never show a move that was not saved.
+            if (!move) return context.finalize(false);
+            const record = context.eventRecord;
+            const resourceId = String(context.newResource?.id ?? (record as EventModel & { resourceId?: string }).resourceId ?? '');
+            const change = dropToMove(context.startDate, resourceId, timeZone);
+            move(String(record.id), change)
+              .then((ok) => context.finalize(ok))
+              .catch(() => context.finalize(false));
+          }) as never,
           features: {
             timeRanges: { showHeaderElements: true, showCurrentTimeLine: false },
+            eventDrag: { constrainDragToTimeline: true },
+            eventResize: false,
+            eventEdit: false,
+            eventDragCreate: false,
+            eventMenu: false,
+            scheduleMenu: false,
+            cellEdit: false,
+            eventCopyPaste: false,
             eventTooltip: {
               template: ({ eventRecord }: { eventRecord: EventModel }) => {
                 const e = custom(eventRecord);

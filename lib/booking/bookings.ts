@@ -117,14 +117,17 @@ export function moveTimeProblem(booking: Booking, startsAt: string, now: Date): 
 }
 
 /**
- * Moves a booking to another staff member and/or time (owner copilot step; no money moves). Time
- * rules are in moveTimeProblem.
+ * Moves a booking to another staff member and/or time (owner copilot step, staff drag; no money moves).
+ * Time rules are in moveTimeProblem. `checkSlot`, when given, must accept the new place; it runs and the
+ * move is saved under the 'slots' lock (lock order: booking, then slots), so a drag can't take a slot
+ * that a customer is booking at the same moment.
  */
 export function moveBooking(
   store: BookingStore,
   bookingId: string,
   change: { staffId?: string; startsAt?: string },
   now: Date = new Date(),
+  checkSlot?: (booking: Booking, moved: Booking) => string | undefined,
 ): Promise<Booking> {
   return withBookingLock(bookingId, async () => {
     const booking = store.get(bookingId);
@@ -145,7 +148,19 @@ export function moveBooking(
       startsAt = new Date(Date.parse(change.startsAt)).toISOString();
     }
     const moved: Booking = { ...booking, startsAt, staffId: change.staffId ?? booking.staffId };
-    store.save(moved);
-    return moved;
+    if (!checkSlot) {
+      store.save(moved);
+      return moved;
+    }
+    return withBookingLock(
+      'slots',
+      async () => {
+        const problem = checkSlot(booking, moved);
+        if (problem) throw new BookingInputError(problem);
+        store.save(moved);
+        return moved;
+      },
+      'wait',
+    );
   });
 }

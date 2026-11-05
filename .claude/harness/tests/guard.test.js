@@ -73,6 +73,43 @@ for (const [expected, list] of Object.entries(cases)) {
   }
 }
 
+// 多行文件内容不走 Shell（FAILURES F-001）
+const multilineWrites = {
+  deny: [
+    "node -e '\nconst fs=require(\"fs\");\nfs.writeFileSync(\"a.ts\", \"x\");'",
+    "cd app && node -e 'const s=1;\nrequire(\"fs\").appendFileSync(\"b.md\", \"y\")'",
+    "python -c 'import os\nopen(\"c.txt\", \"w\").write(\"z\")'",
+    "cat > src/a.ts <<'EOF'\nexport const a = `${b}`;\nEOF",
+    "cat <<EOF > notes.md\nhello\nEOF",
+    "tee out.txt <<EOF\nx\nEOF",
+    "cat <<EOF >| clobber.txt\nx\nEOF",
+    "python3 - <<'PY'\nopen('d.txt', 'w').write('z')\nPY",
+    "cd app && node <<'JS'\nrequire('fs').writeFileSync('e.ts', 'x')\nJS",
+  ],
+  allow: [
+    "node -e 'require(\"fs\").writeFileSync(\"a.txt\", \"one line\")'",
+    "node -e '\nconst x = 1;\nconsole.log(x + 1);'",
+    "sed -i 's/a/b/' src/a.ts",
+    "cat <<EOF\njust printed\nEOF",
+    "grep -c x <<< \"$text\"",
+    "git commit -F msg.txt",
+    // Heredoc text inside quotes is data, not a heredoc
+    "node -e \"console.log('cat > a.ts <<EOF')\"",
+    "git commit -m 'never use cat > f <<EOF here'",
+    // A quoted message spanning lines is data too
+    "git commit -m \"Block heredoc writes\n\nFor example cat > f <<EOF is now refused.\"",
+    // The usual commit form: the heredoc feeds cat's stdout into -m, it writes no file
+    "git commit -m \"$(cat <<'EOF'\nSubject\n\nBody with it's apostrophe\nEOF\n)\"",
+    // A heredoc script that only reads
+    "python3 - <<'PY'\nprint(open('a.txt').read())\nPY",
+  ],
+};
+for (const [expected, list] of Object.entries(multilineWrites)) {
+  for (const cmd of list) {
+    test(`多行写文件 ${expected}: ${JSON.stringify(cmd).slice(0, 60)}`, () => assert.strictEqual(bash(cmd), expected));
+  }
+}
+
 test('强推：当前分支不是受保护分支时只需确认', () => assert.strictEqual(bash('git push -f', other), 'ask'));
 test('删除项目根目录的绝对路径', () => assert.strictEqual(bash(`rm -rf "${repo}"`), 'deny'));
 test('删除项目上级目录', () => assert.strictEqual(bash(`rm -rf "${path.dirname(repo)}"`), 'deny'));

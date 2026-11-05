@@ -381,12 +381,54 @@ function checkDatabase(segments, raw, out) {
   if (/\bdelete\s+from\s+[\w."`[\]]+\s*(;|$|"|')/im.test(raw)) out.ask('DELETE FROM 没有 WHERE 条件，会删除整张表的数据。');
 }
 
+// 多行文件内容不走 Shell（FAILURES F-001，复发两次）：引号、反引号、${} 和撇号会打断外层解析，
+// 失败时 Bash 还可能把剩下的文本当命令执行。多行内容一律用 Write / Edit 工具写。
+const MULTILINE_WRITE_HINT = '多行文件内容请用 Write / Edit 工具写，不要用 Shell（FAILURES F-001）。单行替换（如 sed、单行 node -e）不受影响。';
+
+// Calls that write files from node / python / perl / ruby. Matched anywhere in the script, string data
+// included, so a multi-line script that only mentions them is refused too (use a script file instead).
+const WRITE_CALLS = /writeFileSync|writeFile\s*\(|appendFileSync|createWriteStream|\.write_text\s*\(|\bopen\s*\([^)]*['"][wax]\+?b?['"]|File\.write/;
+const SCRIPT_RUNNERS = /(^|[\s;&|(])(node|python3?|py|perl|ruby|deno)(\s[^<]*)?\s<</;
+
+// heredoc 写文件：cat > f <<EOF、cat <<'EOF' >| f、tee f <<EOF，以及 node/python 等从 heredoc 读入的写文件脚本
+function checkHeredocWrite(cmd, out) {
+  const text = String(cmd);
+  // Text inside quotes is data (a commit message, an example), not shell. Blank it out, keeping its line
+  // breaks so lines still match the original, but keep a quoted heredoc delimiter such as <<'EOF'.
+  const blanked = text.replace(/(<<-?\s*)?(['"])(?:\\[\s\S]|(?!\2)[^\\])*\2/g, (m, op) => (op ? m : `""${m.replace(/[^\n]/g, '')}`));
+  const lines = blanked.split('\n');
+  const original = text.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const op = line.match(/<<-?\s*['"]?([A-Za-z_]\w*)['"]?/);
+    if (!op || /<<</.test(line)) continue;
+    if (/(^|[^0-9&>])>{1,2}\|?\s*[^&\s|]/.test(line) || /\btee\b/.test(line)) return out.deny(`heredoc 写文件。${MULTILINE_WRITE_HINT}`);
+    if (SCRIPT_RUNNERS.test(line)) {
+      const end = original.findIndex((l, j) => j > i && l.trim() === op[1]);
+      const body = original.slice(i + 1, end === -1 ? undefined : end).join('\n');
+      if (WRITE_CALLS.test(body)) return out.deny(`heredoc 里的脚本写文件。${MULTILINE_WRITE_HINT}`);
+    }
+  }
+}
+
+// node -e / python -c / perl -e / ruby -e 的内联脚本跨多行且写文件
+function checkInlineScriptWrite(prog, args, out) {
+  const flags = { node: ['-e', '--eval', '-p', '--print'], python: ['-c'], python3: ['-c'], py: ['-c'], perl: ['-e', '-E'], ruby: ['-e'], deno: ['eval'] };
+  const wanted = flags[prog];
+  if (!wanted) return;
+  const k = args.findIndex((a) => wanted.includes(a));
+  const script = k === -1 ? '' : args[k + 1] || '';
+  if (!script.includes('\n')) return;
+  if (WRITE_CALLS.test(script)) out.deny(`多行内联脚本（${prog}）写文件。${MULTILINE_WRITE_HINT}`);
+}
+
 function analyzeCommand(cmd, shell, cwd, out, depth = 0) {
   if (!cmd || depth > 3) return;
   if (/:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/.test(cmd)) return out.deny('检测到 fork 炸弹。');
   if (/\b(curl|wget|iwr|invoke-webrequest|irm|invoke-restmethod)\b[^|]*\|\s*(sudo\s+)?(sh|bash|zsh|iex|invoke-expression|python3?|node)\b/i.test(cmd)) {
     out.ask('下载远程脚本并直接执行，内容未经审查。');
   }
+  if (shell === 'bash') checkHeredocWrite(cmd, out);
   const segments = splitSegments(cmd, shell);
   checkDatabase(segments, cmd, out);
   for (const seg of segments) {
@@ -394,6 +436,7 @@ function analyzeCommand(cmd, shell, cwd, out, depth = 0) {
     if (!tokens.length) continue;
     const prog = programName(tokens[0]);
     const args = tokens.slice(1);
+    checkInlineScriptWrite(prog, args, out);
 
     // 嵌套执行：bash -c "..." / powershell -Command "..." / cmd /c ... / eval / iex
     if (['bash', 'sh', 'zsh', 'dash'].includes(prog)) {

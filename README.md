@@ -11,7 +11,7 @@ money action is audited.
 
 - **Deposit holds.** A customer books a free slot (opening hours and staff availability are checked on the server) and PayPal holds a deposit on their account (Orders v2 `AUTHORIZE`, JS SDK v6). Nothing is charged yet. The deposit counts toward the service price, and the rest is paid at the shop; the pages and the board show the price, the deposit and that balance.
 - **Money actions for the owner.** Capture the whole deposit when the service happened, charge a no-show fee (partial capture, the rest of the hold is released), void the hold, or refund, from buttons on the staff board that each ask for confirmation. Reauthorizing a hold is an API route and a copilot step.
-- **Live staff board.** A Bryntum Scheduler day view coloured by deposit state, with closed hours shaded and a "Now" line in shop time; PayPal webhooks and staff actions update it live.
+- **Live staff board.** A Bryntum Scheduler day view coloured by deposit state, with closed hours shaded and a "Now" line in shop time, and drag to reschedule (the server checks the new slot); PayPal webhooks and staff actions update it live.
 - **Owner copilot.** The owner types what changed ("Maria is sick tomorrow, move her clients to Ken"). Claude reads the bookings with read-only tools and proposes a plan. The plan is previewed on the schedule, checked in code, and runs only after the owner approves. Every step is written to an audit log with its PayPal ids.
 - **Bookings by customers' AI assistants.** An MCP server (`/api/mcp`) lets an assistant search slots, hold one and get a PayPal approval link. The customer approves the deposit in PayPal themselves; the assistant never moves money.
 - **Saved wallet.** A customer can opt in to save their PayPal wallet (Vault) so a no-show fee can be charged later, once, without them present.
@@ -188,6 +188,7 @@ unnoticed. So the first deploy with a database, or a rollback to such a release,
 
 - Bookings are coloured by deposit state and update live over Server-Sent Events, from PayPal webhooks as well as staff actions.
 - Clicking a booking opens the **Booking** tab: its deposit, and buttons for only the money actions that deposit allows right now. Each one asks for confirmation; amounts accept `4.50` or `4,50` and refuse ambiguous input such as `4,500`.
+- Drag a booking to another time or staff member to reschedule it. Drops snap to the half-hour grid, and the server checks the new place (opening hours, staff who do the service, no overlap, the deposit's 3-day window) under the same lock as new bookings; a refused drop goes back and the board says why. A held deposit stays held. Finished bookings, and everything while a copilot plan is previewed, can't be dragged.
 - The copilot panel previews a plan on the schedule before anything runs: a dashed ghost at the destination, a faded original, and a note for each money step. Nothing moves until the owner approves.
 - The audit log lists every action the copilot ran, with its PayPal ids.
 
