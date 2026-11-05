@@ -86,7 +86,7 @@ PayPal/
 - [x] Copilot gets the current date, time and UTC offset in `BUSINESS_TIME_ZONE` with every request (11-04); deployed 11-04 (ee37d25), answers "tomorrow" correctly
 - [x] Booking form reads the typed time as shop time in `BUSINESS_TIME_ZONE`; confirmation and hold expiry shown in shop time (11-04); deployed 11-04 (9c9e022), checked live
 - [x] Live copilot runs on Render (11-05): a move plan and a void plan proposed, approved and audited; the void entry carries the PayPal order and authorization ids
-- [x] Copilot told that void_deposit also cancels the booking (11-05); not deployed yet
+- [x] Copilot told that void_deposit also cancels the booking (11-05); deployed 11-05 (88c5261, Render live 11:20 AM)
 - [x] MCP checked live with Claude Code as the client (11-05): hold, create_deposit returned the approval link, sandbox approval, deposit held, lapsed hold cancelled, both shown on the board. The first two create_deposit calls got PayPal 401; they worked after the user put a new PayPal secret on Render (service restarted 11:20 PT; webhooks verified and handled after it)
 
 **In progress**
