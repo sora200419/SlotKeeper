@@ -39,7 +39,7 @@
 | Third-party services / APIs | `@paypal/paypal-server-sdk` 2.5.0 (Orders, Payments, Vault, Payouts, Transaction Search, Webhooks); Anthropic API via `@anthropic-ai/sdk` (copilot, default `claude-haiku-5-5`); `@modelcontextprotocol/sdk` (MCP server) |
 | Deployment | Render Blueprint (`render.yaml`): web service `slotkeeper` (starter, oregon, 1 instance, `autoDeploy: false`) + `slotkeeper-db`. Live: https://slotkeeper-93dy.onrender.com |
 
-**Known constraints**: PayPal sandbox only; an authorization's honor period is 3 days, while the authorization itself expires up to 29 days later (about four weeks in the 11-05 sandbox run) (the PayPal expiry shown as "valid until" on /book/[id]); Render stops builds at 8 GB, so the build uses webpack (Turbopack peaked at 21 GB); `NEXT_PUBLIC_*` values are baked in at build time; local runs behind HTTPS-inspecting antivirus need `NODE_OPTIONS=--use-system-ca`.
+**Known constraints**: PayPal sandbox only; an authorization's honor period is 3 days, while the authorization itself expires 29 days later (two sandbox holds on 11-05 both showed exactly 29 days) (the PayPal expiry shown as "valid until" on /book/[id]); Render stops builds at 8 GB, so the build uses webpack (Turbopack peaked at 21 GB); `NEXT_PUBLIC_*` values are baked in at build time; local runs behind HTTPS-inspecting antivirus need `NODE_OPTIONS=--use-system-ca`.
 
 ## 5. File Structure
 ```
@@ -86,17 +86,18 @@ PayPal/
 - [x] Copilot gets the current date, time and UTC offset in `BUSINESS_TIME_ZONE` with every request (11-04); deployed 11-04 (ee37d25), answers "tomorrow" correctly
 - [x] Booking form reads the typed time as shop time in `BUSINESS_TIME_ZONE`; confirmation and hold expiry shown in shop time (11-04); deployed 11-04 (9c9e022), checked live
 - [x] Live copilot runs on Render (11-05): a move plan and a void plan proposed, approved and audited; the void entry carries the PayPal order and authorization ids
-- [x] Copilot told that void_deposit also cancels the booking (11-05); deployed 11-05 (88c5261, Render live 11:20 AM)
-- [x] MCP checked live with Claude Code as the client (11-05): hold, create_deposit returned the approval link, sandbox approval, deposit held, lapsed hold cancelled, both shown on the board; cancel_booking on the held booking returned cancelled and PayPal's PAYMENT.AUTHORIZATION.VOIDED webhook arrived at 12:05 PT (Render log). The first two create_deposit calls got PayPal 401; they worked after the user put a new PayPal secret on Render (service restarted 11:20 PT; webhooks verified and handled after it)
-- [x] Customer pages redesigned (11-05): landing page, /book and /book/[id] share `components/SiteShell.tsx` and `app/site.css` (scoped under `.sk-site`, board colours); no logic changes; not deployed yet
+- [x] Copilot told that void_deposit also cancels the booking (11-05); deployed 11-05 (88c5261, Render live 11:20 UTC+8)
+- [x] MCP checked live with Claude Code as the client (11-05): hold, create_deposit returned the approval link, sandbox approval, deposit held, lapsed hold cancelled, both shown on the board; cancel_booking on the held booking returned cancelled and PayPal's PAYMENT.AUTHORIZATION.VOIDED webhook arrived at 12:05 UTC+8 (Render log, shown in browser time). The first two create_deposit calls got PayPal 401; they worked after the user put a new PayPal secret on Render (service restarted 11:20 UTC+8; webhooks verified and handled after it)
+- [x] Secrets rotated (11-05): new PayPal secret on Render and in `.env.local`; new STAFF_API_TOKEN on Render, made for judging and checked on the live /staff (value kept only on Render and, at submission, in Devpost); Anthropic spend capped by $5 prepaid credit with auto-reload off
+- [x] Customer pages redesigned (11-05): landing page, /book and /book/[id] share `components/SiteShell.tsx` and `app/site.css` (scoped under `.sk-site`, board colours); no logic changes; deployed and checked live 11-05 (a card paragraph-spacing fix is not deployed yet)
 
 **In progress**
 - [ ] Nothing in progress.
 
 **To do (by priority)**
-- [ ] PayPal secret rotated on Render (11-05); still to do: put it in `.env.local`, rotate STAFF_API_TOKEN (Render + `.env.local`). Anthropic spend is capped by prepaid credit: $5 with auto-reload off (console checked 11-05); keep auto-reload off and watch the balance until 12-15
+- [ ] After judging ends (12-15): rotate STAFF_API_TOKEN on Render again. Until then keep Anthropic auto-reload off ($5 prepaid caps spend) and watch the balance
 - [ ] Check the "Persistence Check" booking survived a restart (it is dated 11-02, before today)
-- [ ] Make a fresh judging STAFF_API_TOKEN and type it into the Devpost testing field only (decided 11-05; docs/devpost.md checklist item 1)
+- [ ] At submission: type the Render STAFF_API_TOKEN (the judging token) into the Devpost testing field only (docs/devpost.md checklist item 1)
 - [ ] Video (under 3 min), screenshots, one sourced no-show statistic
 - [ ] GitHub About fields (description, website, topics)
 - [ ] Discord questions: AI API credits; Bryntum trial validity through 12-15

@@ -73,7 +73,7 @@ The AI parts: the owner copilot in `lib/copilot/` (Claude, plan → approve → 
 
 ## Try it (for judges)
 
-You need a **PayPal sandbox personal account** (your own, from developer.paypal.com > Testing tools > Sandbox accounts). No credentials of ours are needed to book. The time box is shop time (Los Angeles, from `BUSINESS_TIME_ZONE`) wherever you are, and the confirmation page shows that time too; the deposits report shows UTC. Bookings can be at most 3 days ahead, because PayPal only guarantees that a held deposit can be captured for 3 days (the authorization's honor period). The authorization itself stays open longer: the "valid until" on the confirmation page is PayPal's own expiry date, up to 29 days later (about four weeks in our sandbox run).
+You need a **PayPal sandbox personal account** (your own, from developer.paypal.com > Testing tools > Sandbox accounts). No credentials of ours are needed to book. The time box is shop time (Los Angeles, from `BUSINESS_TIME_ZONE`) wherever you are, and the confirmation page shows that time too; the deposits report shows UTC. Bookings can be at most 3 days ahead, because PayPal only guarantees that a held deposit can be captured for 3 days (the authorization's honor period). The authorization itself stays open longer: the "valid until" on the confirmation page is PayPal's own expiry date, 29 days later in our sandbox runs.
 
 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the **Your name** field (bookings are shared and shown on the staff board) and choose a time within 3 days.
 2. Click **Book and hold deposit**, then pay with the PayPal button using your sandbox personal account. The page then shows "Deposit held" with the PayPal authorization id.

@@ -121,6 +121,13 @@
 - **Rule destination**: global ~/.claude/CLAUDE.md
 - **Recurrences**: none
 
+### F-016 · 2026-11-05 · Screenshot times read as Los Angeles time; a non-bug reported and wrong times written to the docs
+- **Symptom**: The confirmation page said the hold was valid until 19:25 PST. I compared that with terminal and Render-log times from the user's screenshots (11:25 AM), assumed those were Los Angeles time, and told the user the page probably showed UTC as PST (8 hours off). CLAUDE.md then got "12:05 PT" and "11:20 PT" for times that were the user's browser time (UTC+8). A later booking showed exactly 29 days to expiry, which exposed the mistake: the page had been right all along.
+- **Root cause**: Wrong assumption: terminal, Render log and taskbar times are shown in the viewer's own zone (UTC+8 here), and I labelled them with a zone I never confirmed before deriving a duration from them.
+- **Fix**: The times in CLAUDE.md are relabelled UTC+8; the docs now state the observed 29-day expiry; the "display bug" was withdrawn.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
+
 ## Pruning log
 
 | Date | Action (delete / merge / automate / promote to global) | Entries | Notes |
