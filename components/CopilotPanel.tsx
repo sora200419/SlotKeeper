@@ -12,7 +12,7 @@ interface Props {
   api: <T>(path: string, init?: RequestInit) => Promise<T>;
 }
 
-const EXAMPLES = ['Maria is sick tomorrow. Move her clients to Ken, refund anyone who cannot move.', 'Who has not paid a deposit yet?'];
+const EXAMPLES = ['Maria is out tomorrow morning. Move her clients to the afternoon, release the hold for anyone who cannot move.', 'Who has not paid a deposit yet?'];
 
 const isMoney = (step: PlanStep) => step.type !== 'move_booking';
 

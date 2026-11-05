@@ -100,7 +100,7 @@ PayPal/
 - [ ] After judging ends (12-15): rotate STAFF_API_TOKEN on Render again. Until then keep Anthropic auto-reload off ($5 prepaid caps spend) and watch the balance
 - [ ] Check the "Persistence Check" booking survived a restart (it is dated 11-02, before today)
 - [ ] At submission: type the Render STAFF_API_TOKEN (the judging token) into the Devpost testing field only (docs/devpost.md checklist item 1)
-- [ ] Video (under 3 min), screenshots, one sourced no-show statistic
+- [ ] Video (under 3 min), screenshots, one sourced no-show statistic. Script and a manual test plan are kept locally in docs/ (video-script.md, test-plan.md; not committed, listed in .git/info/exclude) (11-05)
 - [ ] GitHub About fields (description, website, topics)
 - [ ] Discord question: AI API credits. Bryntum answered on Discord (11-05): from v8.0 (releasing this week) a 45-day trial can be renewed with a new key. Still to check how that applies to our npm trial package 7.3.7 (no key); do not upgrade before the freeze
 - [ ] Submit on Devpost by 11-11
@@ -113,6 +113,7 @@ PayPal/
 - Bryntum trial watermark. Trial validity through judging: Bryntum says v8.0 trials are renewable with a new key; how that applies to the 7.3.7 npm trial package is TBC.
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.
 - Copilot move steps do not check the slot when they run (only the plan is validated): a booking dragged in another tab while a plan is open can end up overlapping it. Bookings that start within 30 minutes look draggable but every drop is refused.
+- Copilot plan validation (lib/copilot/plan.ts move_booking) checks only that the staff member exists and moveTimeProblem; it does not check that the staff member does the service, opening hours or overlap, so a copilot plan can move a haircut to Ken while a drag refuses it. The examples in the UI placeholder, README, devpost and landing page no longer suggest moving to Ken (changed 11-05).
 - The board can briefly show an older booking state if a slow action response lands after a newer live update; a Retry button stays visible on a panel left open past the replay window (the server refuses it safely).
 - Payouts carry a tip field, but nothing creates tips yet.
 

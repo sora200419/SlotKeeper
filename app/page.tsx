@@ -30,7 +30,7 @@ export default function Home() {
         <article className="site-card">
           <h2>Owner copilot</h2>
           <p>
-            The owner types what changed, like &ldquo;Maria is sick tomorrow, move her clients to Ken&rdquo;. Claude
+            The owner types what changed, like &ldquo;Maria is out tomorrow morning, move her clients to the afternoon&rdquo;. Claude
             proposes a plan, it is previewed on the schedule, and it runs only after the owner approves. Every
             step that runs is written to an audit log.
           </p>
