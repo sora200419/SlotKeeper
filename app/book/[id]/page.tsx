@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
 import { DepositCheckout } from '@/components/DepositCheckout';
+import { SiteShell } from '@/components/SiteShell';
 import { findService, formatAmount } from '@/lib/booking/catalog';
 import { getBookingStore, type BookingStatus } from '@/lib/booking/store';
 import { formatInZone } from '@/lib/booking/zoned-time';
@@ -27,24 +28,28 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
   const timeZone = readBusinessTimeZone();
 
   return (
-    <main>
-      <h1>{service?.name ?? 'Booking'}</h1>
-      <p>
-        {booking.customerName} · {formatInZone(booking.startsAt, timeZone)}
-      </p>
-      {booking.status === 'awaiting_deposit' ? (
-        <DepositCheckout
-          bookingId={booking.id}
-          currency={booking.deposit.currency}
-          depositLabel={depositLabel}
-          timeZone={timeZone}
-        />
-      ) : (
-        <p role="status">
-          {STATUS_TEXT[booking.status]} ({depositLabel}). Authorization{' '}
-          <code>{booking.hold?.authorizationId}</code>.
+    <SiteShell>
+      <div className="site-narrow">
+        <h1 className="site-page-title">{service?.name ?? 'Booking'}</h1>
+        <p className="site-sub">
+          {booking.customerName} · {formatInZone(booking.startsAt, timeZone)}
         </p>
-      )}
-    </main>
+        <div className="site-card">
+          {booking.status === 'awaiting_deposit' ? (
+            <DepositCheckout
+              bookingId={booking.id}
+              currency={booking.deposit.currency}
+              depositLabel={depositLabel}
+              timeZone={timeZone}
+            />
+          ) : (
+            <p role="status" className="site-status">
+              {STATUS_TEXT[booking.status]} ({depositLabel}). Authorization{' '}
+              <code>{booking.hold?.authorizationId}</code>.
+            </p>
+          )}
+        </div>
+      </div>
+    </SiteShell>
   );
 }

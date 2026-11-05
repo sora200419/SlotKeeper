@@ -1,4 +1,5 @@
 import { NewBookingForm } from '@/components/NewBookingForm';
+import { SiteShell } from '@/components/SiteShell';
 import { formatAmount, listServices } from '@/lib/booking/catalog';
 import { defaultSlotIn } from '@/lib/booking/zoned-time';
 import { readBusinessTimeZone } from '@/lib/paypal/payout-deps';
@@ -13,10 +14,14 @@ export default function BookPage() {
     label: `${service.name} — deposit ${formatAmount(service.deposit)} ${service.deposit.currency}`,
   }));
   return (
-    <main>
-      <h1>Book a slot</h1>
-      <p>Bookings are held with a PayPal deposit (sandbox). You can book up to 3 days ahead.</p>
-      <NewBookingForm services={services} timeZone={timeZone} defaultStartsAt={defaultSlotIn(new Date(), timeZone)} />
-    </main>
+    <SiteShell>
+      <div className="site-narrow">
+        <h1 className="site-page-title">Book a slot</h1>
+        <p className="site-sub">Bookings are held with a PayPal deposit (sandbox). You can book up to 3 days ahead.</p>
+        <div className="site-card">
+          <NewBookingForm services={services} timeZone={timeZone} defaultStartsAt={defaultSlotIn(new Date(), timeZone)} />
+        </div>
+      </div>
+    </SiteShell>
   );
 }

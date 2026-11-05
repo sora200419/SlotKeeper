@@ -52,8 +52,8 @@ export function NewBookingForm({
   }
 
   return (
-    <form onSubmit={onSubmit} style={{ display: 'grid', gap: '0.75rem', maxWidth: 360 }}>
-      <label>
+    <form onSubmit={onSubmit} className="site-form">
+      <label className="site-field">
         Service{' '}
         <select name="serviceId" required>
           {services.map((service) => (
@@ -63,17 +63,24 @@ export function NewBookingForm({
           ))}
         </select>
       </label>
-      <label>
+      <label className="site-field">
         Your name <input name="customerName" required maxLength={80} />
       </label>
-      <label>
-        Time <input name="startsAt" type="datetime-local" required defaultValue={defaultStartsAt} />
+      <label className="site-field">
+        Time{' '}
+        <input name="startsAt" type="datetime-local" required defaultValue={defaultStartsAt} aria-describedby="startsAt-hint" />
       </label>
-      <small>Times are shop time: {timeZone}.</small>
-      <button type="submit" disabled={submitting}>
+      <small id="startsAt-hint" className="site-hint">
+        Times are shop time: {timeZone}.
+      </small>
+      <button type="submit" className="site-button site-button-primary" disabled={submitting}>
         {submitting ? 'Booking…' : 'Book and hold deposit'}
       </button>
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert" className="site-alert">
+          {error}
+        </p>
+      )}
     </form>
   );
 }

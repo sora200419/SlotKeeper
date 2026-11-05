@@ -88,12 +88,13 @@ PayPal/
 - [x] Live copilot runs on Render (11-05): a move plan and a void plan proposed, approved and audited; the void entry carries the PayPal order and authorization ids
 - [x] Copilot told that void_deposit also cancels the booking (11-05); deployed 11-05 (88c5261, Render live 11:20 AM)
 - [x] MCP checked live with Claude Code as the client (11-05): hold, create_deposit returned the approval link, sandbox approval, deposit held, lapsed hold cancelled, both shown on the board. The first two create_deposit calls got PayPal 401; they worked after the user put a new PayPal secret on Render (service restarted 11:20 PT; webhooks verified and handled after it)
+- [x] Customer pages redesigned (11-05): landing page, /book and /book/[id] share `components/SiteShell.tsx` and `app/site.css` (scoped under `.sk-site`, board colours); no logic changes; not deployed yet
 
 **In progress**
 - [ ] Nothing in progress.
 
 **To do (by priority)**
-- [ ] PayPal secret rotated on Render (11-05); still to do: put it in `.env.local`, rotate STAFF_API_TOKEN (Render + `.env.local`), set a spending cap on the Anthropic account (the API key is already on Render)
+- [ ] PayPal secret rotated on Render (11-05); still to do: put it in `.env.local`, rotate STAFF_API_TOKEN (Render + `.env.local`). Anthropic spend is capped by prepaid credit: $5 with auto-reload off (console checked 11-05); keep auto-reload off and watch the balance until 12-15
 - [ ] Check the "Persistence Check" booking survived a restart (it is dated 11-02, before today)
 - [ ] Make a fresh judging STAFF_API_TOKEN and type it into the Devpost testing field only (decided 11-05; docs/devpost.md checklist item 1)
 - [ ] Video (under 3 min), screenshots, one sourced no-show statistic

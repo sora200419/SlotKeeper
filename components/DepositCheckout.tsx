@@ -164,9 +164,9 @@ export function DepositCheckout({ bookingId, currency, depositLabel, timeZone }:
         Deposit to hold this slot: <strong>{depositLabel}</strong>. PayPal only holds it now;
         nothing is charged unless you miss the appointment.
       </p>
-      {phase.kind === 'loading' && <p>Loading PayPal…</p>}
+      {phase.kind === 'loading' && <p className="site-muted">Loading PayPal…</p>}
       {(phase.kind === 'ready' || phase.kind === 'loading') && (
-        <label>
+        <label className="site-check">
           <input
             type="checkbox"
             checked={savePayment}
@@ -178,17 +178,17 @@ export function DepositCheckout({ bookingId, currency, depositLabel, timeZone }:
         </label>
       )}
       <paypal-button ref={buttonRef} type="pay" class="paypal-gold" hidden={phase.kind !== 'ready'} />
-      {phase.kind === 'working' && <p>{phase.message}</p>}
+      {phase.kind === 'working' && <p className="site-muted">{phase.message}</p>}
       {phase.kind === 'held' && (
-        <p role="status">
+        <p role="status" className="site-status">
           Deposit held. Authorization <code>{phase.authorizationId}</code>
           {phase.expiresAt ? `, valid until ${formatInZone(phase.expiresAt, timeZone)}` : ''}.
         </p>
       )}
       {phase.kind === 'error' && (
-        <p role="alert">
+        <p role="alert" className="site-alert">
           {phase.message}{' '}
-          <button type="button" onClick={() => window.location.reload()}>
+          <button type="button" className="site-button" onClick={() => window.location.reload()}>
             Try again
           </button>
         </p>

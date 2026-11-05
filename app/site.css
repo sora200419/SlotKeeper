@@ -1,0 +1,367 @@
+/*
+ * Customer-facing pages (/, /book, /book/[id]). Global CSS in the App Router applies to every page once
+ * loaded, so every rule is scoped under .sk-site and the staff board's styles are left alone.
+ * Colours match app/staff/board.css.
+ */
+.sk-site {
+  --site-ink: #1c2430;
+  --site-muted: #5d6877;
+  --site-line: #dfe3e8;
+  --site-paper: #ffffff;
+  --site-wash: #f4f5f7;
+  --site-accent: #0b5cad;
+  --site-accent-ink: #ffffff;
+  --site-held-bg: #d9e8fb;
+  --site-held-fg: #0b4a8a;
+  --site-error-bg: #fbdad7;
+  --site-error-fg: #8c1d18;
+  --site-note-bg: #fdf0cf;
+  --site-note-fg: #6b4a00;
+
+  /* Cancel the layout's body margin so the page background reaches the edges. */
+  margin: -2rem;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--site-wash);
+  color: var(--site-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  overflow-x: hidden;
+}
+
+.sk-site *,
+.sk-site *::before,
+.sk-site *::after {
+  box-sizing: border-box;
+}
+
+.sk-site a {
+  color: var(--site-accent);
+}
+
+.sk-site code {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.9em;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+  background: var(--site-wash);
+  overflow-wrap: anywhere;
+}
+
+.sk-site .site-wrap {
+  width: 100%;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* Top bar */
+.sk-site .site-top {
+  background: var(--site-paper);
+  border-bottom: 1px solid var(--site-line);
+}
+
+.sk-site .site-top .site-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 56px;
+}
+
+.sk-site .site-brand {
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: var(--site-ink);
+  text-decoration: none;
+}
+
+.sk-site .site-nav {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.sk-site .site-nav a {
+  color: var(--site-muted);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.sk-site .site-nav a:hover {
+  color: var(--site-ink);
+}
+
+.sk-site main {
+  flex: 1;
+  padding: 2.5rem 0 3rem;
+}
+
+/* Landing page */
+.sk-site .site-hero {
+  padding: 1.5rem 0 2.5rem;
+}
+
+.sk-site .site-eyebrow {
+  display: inline-block;
+  margin: 0 0 1rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--site-note-bg);
+  color: var(--site-note-fg);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.sk-site .site-hero h1 {
+  margin: 0 0 1rem;
+  max-width: 18ch;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.sk-site .site-lead {
+  margin: 0 0 1.75rem;
+  max-width: 60ch;
+  font-size: 1.15rem;
+  color: var(--site-muted);
+}
+
+.sk-site .site-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.sk-site .site-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 1.25rem;
+  border: 1px solid var(--site-line);
+  border-radius: 8px;
+  background: var(--site-paper);
+  color: var(--site-ink);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sk-site .site-button-primary {
+  background: var(--site-accent);
+  border-color: var(--site-accent);
+  color: var(--site-accent-ink);
+}
+
+.sk-site .site-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.sk-site h2 {
+  margin: 0 0 1rem;
+  font-size: 1.35rem;
+  letter-spacing: -0.01em;
+}
+
+.sk-site .site-section {
+  margin-top: 2.5rem;
+}
+
+.sk-site .site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+}
+
+.sk-site .site-card {
+  padding: 1.5rem;
+  border: 1px solid var(--site-line);
+  border-radius: 12px;
+  background: var(--site-paper);
+}
+
+.sk-site .site-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+}
+
+.sk-site .site-card p {
+  margin: 0;
+  color: var(--site-muted);
+}
+
+.sk-site .site-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.sk-site .site-steps li {
+  position: relative;
+  padding: 0 0 1rem 2.5rem;
+  counter-increment: step;
+}
+
+.sk-site .site-steps li::before {
+  content: counter(step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--site-held-bg);
+  color: var(--site-held-fg);
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sk-site .site-card p:first-child {
+  margin-top: 0;
+}
+
+.sk-site .site-card p:last-child {
+  margin-bottom: 0;
+}
+
+/* Booking pages */
+.sk-site .site-narrow {
+  max-width: 520px;
+}
+
+.sk-site .site-page-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.8rem;
+  letter-spacing: -0.02em;
+}
+
+.sk-site .site-sub {
+  margin: 0 0 1.5rem;
+  color: var(--site-muted);
+}
+
+.sk-site .site-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.sk-site .site-field {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.sk-site .site-field input,
+.sk-site .site-field select {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--site-line);
+  border-radius: 8px;
+  background: var(--site-paper);
+  color: var(--site-ink);
+  font: inherit;
+  font-weight: 400;
+}
+
+.sk-site .site-field input:focus,
+.sk-site .site-field select:focus,
+.sk-site .site-button:focus-visible {
+  outline: 2px solid var(--site-accent);
+  outline-offset: 2px;
+}
+
+.sk-site .site-hint {
+  font-weight: 400;
+  color: var(--site-muted);
+  font-size: 0.85rem;
+}
+
+.sk-site .site-check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 1rem 0;
+  font-size: 0.95rem;
+  color: var(--site-muted);
+}
+
+.sk-site .site-check input {
+  margin-top: 0.3rem;
+}
+
+.sk-site .site-status,
+.sk-site .site-alert {
+  margin: 1rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
+}
+
+.sk-site .site-status {
+  background: var(--site-held-bg);
+  color: var(--site-held-fg);
+}
+
+.sk-site .site-status code {
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.sk-site .site-alert {
+  background: var(--site-error-bg);
+  color: var(--site-error-fg);
+}
+
+.sk-site .site-alert .site-button {
+  margin-left: 0.5rem;
+  padding: 0.35rem 0.75rem;
+}
+
+/* Only when shown: a display rule on the bare element would override its hidden attribute. */
+.sk-site paypal-button:not([hidden]) {
+  display: block;
+  margin-top: 1rem;
+}
+
+.sk-site .site-muted {
+  color: var(--site-muted);
+}
+
+/* Footer */
+.sk-site .site-footer {
+  border-top: 1px solid var(--site-line);
+  background: var(--site-paper);
+  color: var(--site-muted);
+  font-size: 0.9rem;
+}
+
+.sk-site .site-footer .site-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+}
+
+.sk-site .site-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+@media (max-width: 480px) {
+  .sk-site main {
+    padding-top: 1.5rem;
+  }
+
+  .sk-site .site-actions .site-button {
+    flex: 1 1 100%;
+  }
+}
