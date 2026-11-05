@@ -160,6 +160,20 @@
   overflow: hidden;
 }
 
+/* Closed hours (outside 9:00-18:00 shop time) and the shop-time "Now" line, from boardTimeRanges. */
+.sk-scheduler .b-sch-time-range.sk-closed {
+  background: repeating-linear-gradient(135deg, rgba(93, 104, 119, 0.07) 0 6px, rgba(93, 104, 119, 0.13) 6px 12px);
+}
+
+.sk-scheduler .b-sch-line.sk-now {
+  border-left: 2px solid var(--sk-danger);
+}
+
+.sk-scheduler .b-sch-line.sk-now label {
+  background: var(--sk-danger);
+  color: #fff;
+}
+
 .sk-zone {
   margin: 0.35rem 0 0;
   font-size: 0.75rem;

@@ -19,13 +19,13 @@ Small appointment businesses (salons, physio studios, tutors, groomers) live on 
 
 ### What it does
 
-- A customer books a slot and PayPal holds a deposit on their account. Nothing is charged yet.
+- A customer books a free slot and PayPal holds a deposit on their account. Nothing is charged yet. The deposit counts toward the price; the rest is paid at the shop.
 - The owner can capture the deposit when the service happened, charge a no-show fee (a partial capture, and the rest of the hold is released), void the hold, or refund, by clicking the booking on the board; each action asks for confirmation. Reauthorizing a hold is an API route and a copilot step.
-- The owner's day is a live board, coloured by deposit state. PayPal webhooks and staff actions update it as they happen.
+- The owner's day is a live board, coloured by deposit state, with closed hours shaded and a "Now" line in shop time. PayPal webhooks and staff actions update it as they happen.
 - The owner types what changed ("Maria is sick tomorrow, move her clients to Ken"). Claude reads the bookings with read-only tools and proposes a plan. The plan is previewed on the schedule before anything runs, checked in code, and executed only after the owner approves. Each step is written to an audit log with its PayPal ids.
 - A customer's AI assistant can book through our MCP server. It reserves a slot and gets a PayPal approval link; the customer approves the deposit in PayPal. The assistant never moves money.
 - Customers can opt in to save their PayPal wallet so a no-show fee can be charged later, once, without them present.
-- At the end of the day one Payouts batch pays each staff member their commission (the batch format already carries tips, but nothing creates tips yet), and a report reads captured deposits, no-show fees and refunds from Transaction Search.
+- At the end of the day one Payouts batch pays each staff member their commission on the money collected through PayPal (the batch format already carries tips, but nothing creates tips yet), and a report reads captured deposits, no-show fees and refunds from Transaction Search.
 
 ### How we built it
 
@@ -93,7 +93,7 @@ Paste this into the Devpost testing field. It repeats the README's "Try it (for 
 
 > **Needs:** a PayPal sandbox personal account (yours, from developer.paypal.com > Testing tools > Sandbox accounts). No credentials of ours are needed to book. Everything is sandbox; no real money moves. Bookings are shared, so use a nickname.
 >
-> 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the "Your name" field and choose a time within the next 3 days (PayPal guarantees a held deposit can be captured for 3 days; the later "valid until" date on the confirmation page is PayPal's expiry of the authorization itself). The time box is shop time (Los Angeles), wherever you are; the confirmation page shows the same time and zone.
+> 1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the "Your name" field and choose a free time within the next 3 days, on the hour or half hour between 9:00 and 18:00 (PayPal guarantees a held deposit can be captured for 3 days; the later "valid until" date on the confirmation page is PayPal's expiry of the authorization itself). The time box is shop time (Los Angeles), wherever you are; the confirmation page shows the same time and zone.
 > 2. Click "Book and hold deposit" and pay with the PayPal button using your sandbox personal account. The page shows "Deposit held" and the PayPal authorization id.
 > 3. Staff screens need a token: **[STAFF TOKEN: type the judging token here in the Devpost field only; never commit it to this repo]**. Open https://slotkeeper-93dy.onrender.com/staff, enter it, and your booking is on the board.
 > 4. Click your booking on the board. The "Booking" tab shows its deposit and only the actions it allows right now: "Capture $…" (the whole deposit), "Charge no-show fee" (any amount up to the deposit; the rest of the hold is released), "Release hold", and afterwards "Refund". Each asks for confirmation. The board shows the result at once and again when PayPal's webhook confirms it. The same actions are API routes; see the README, "Try it (for judges)".

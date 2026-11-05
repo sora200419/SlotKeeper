@@ -24,10 +24,25 @@ export interface NewBookingInput {
   startsAt: unknown;
 }
 
+/**
+ * The /book form is public and an unpaid booking blocks its slot for up to an hour, so at most this many
+ * unpaid web bookings can block slots at once (the MCP hold has its own cap). Judges share one demo.
+ */
+export const MAX_UNPAID_WEB_HOLDS = 20;
+
+/** Shown when the requested time is outside opening hours, off the half-hour grid, too soon, or taken. */
+export const SLOT_UNAVAILABLE_MESSAGE =
+  'That time is not available. Pick a free time on the hour or half hour, within opening hours (9:00-18:00 shop time) and at least 30 minutes from now.';
+
+/**
+ * `pickStaff`, when given, chooses the staff member who is free at the validated time (or none, and the
+ * booking is refused). Callers that check slots themselves, like the MCP hold, leave it out.
+ */
 export function createBooking(
   store: BookingStore,
   input: NewBookingInput,
   now: Date = new Date(),
+  pickStaff?: (serviceId: string, startsAt: string) => string | undefined,
 ): Booking {
   if (typeof input.serviceId !== 'string') throw new BookingInputError('serviceId is required.');
   const service = findService(input.serviceId);
@@ -54,15 +69,22 @@ export function createBooking(
     );
   }
 
+  const startsAt = new Date(startsAtMs).toISOString();
+  let staffId = defaultStaffFor(service.id)?.id;
+  if (pickStaff) {
+    staffId = pickStaff(service.id, startsAt);
+    if (!staffId) throw new BookingInputError(SLOT_UNAVAILABLE_MESSAGE);
+  }
+
   const booking: Booking = {
     id: randomUUID(),
     serviceId: service.id,
     customerName,
-    startsAt: new Date(startsAtMs).toISOString(),
+    startsAt,
     deposit: { ...service.deposit },
     status: 'awaiting_deposit',
     createdAt: now.toISOString(),
-    staffId: defaultStaffFor(service.id)?.id,
+    staffId,
   };
   store.save(booking);
   return booking;

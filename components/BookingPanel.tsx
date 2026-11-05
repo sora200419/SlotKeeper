@@ -70,6 +70,17 @@ function confirmText(action: BoardAction, name: string): string {
   }
 }
 
+/**
+ * Bookings where the customer still pays the rest of the price in person. The deposit counts toward
+ * the price; only the deposit goes through PayPal.
+ */
+const BALANCE_DUE = new Set<BoardBooking['status']>([
+  'awaiting_deposit',
+  'deposit_held',
+  'deposit_pending',
+  'completed',
+]);
+
 export function BookingPanel({ booking, services, staff, timeZone, api, onBooking }: Props) {
   const [state, dispatch] = useReducer(panelReducer, PANEL_START);
 
@@ -83,6 +94,7 @@ export function BookingPanel({ booking, services, staff, timeZone, api, onBookin
   const hold = booking.hold;
   const when = new Intl.DateTimeFormat('en-GB', { timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(booking.startsAt));
   const who = staff.find((s) => s.id === booking.staffId)?.name ?? 'Unassigned';
+  const priceCents = services.find((s) => s.id === booking.serviceId)?.priceCents;
 
   async function confirm(target: BoardBooking, action: BoardAction, cents: number | undefined) {
     const { path, body } = actionRequest(action, target.id, cents);
@@ -111,8 +123,20 @@ export function BookingPanel({ booking, services, staff, timeZone, api, onBookin
       </header>
 
       <dl>
+        {priceCents !== undefined && (
+          <>
+            <dt>Price</dt>
+            <dd>{dollars(priceCents)}</dd>
+          </>
+        )}
         <dt>Deposit</dt>
         <dd>{dollars(booking.deposit.cents)}</dd>
+        {priceCents !== undefined && BALANCE_DUE.has(booking.status) && (
+          <>
+            <dt>Balance at shop</dt>
+            <dd>{dollars(Math.max(0, priceCents - booking.deposit.cents))}</dd>
+          </>
+        )}
         {hold?.capture && (
           <>
             <dt>Captured</dt>

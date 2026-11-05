@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { Scheduler, EventModel } from '@bryntum/scheduler';
-import { wallClock, type BoardEvent, type BoardStaff } from '@/lib/board/view';
+import { boardTimeRanges, wallClock, type BoardEvent, type BoardStaff } from '@/lib/board/view';
 
 interface Props {
   staff: BoardStaff[];
@@ -93,11 +93,14 @@ export function BookingScheduler({ staff, events, day, hours, timeZone, onSelect
           zoomOnTimeAxisDoubleClick: false,
           columns: [{ text: 'Staff', field: 'name', width: 130 }],
           resources: latest.current.staff,
+          // Closed hours shaded, and a "Now" line in shop time (refreshed every minute below).
+          timeRanges: boardTimeRanges(latest.current.day, new Date(), timeZone) as never,
           eventRenderer: renderEvent as never,
           onEventClick: ({ eventRecord }: { eventRecord: EventModel }) => {
             latest.current.onSelect?.(String(eventRecord.id).replace(/^ghost-/, ''));
           },
           features: {
+            timeRanges: { showHeaderElements: true, showCurrentTimeLine: false },
             eventTooltip: {
               template: ({ eventRecord }: { eventRecord: EventModel }) => {
                 const e = custom(eventRecord);
@@ -142,7 +145,15 @@ export function BookingScheduler({ staff, events, day, hours, timeZone, onSelect
     if (!scheduler.current) return;
     const { startDate, endDate } = span(day, hours);
     scheduler.current.setTimeSpan(startDate, endDate);
-  }, [day, hours]);
+    scheduler.current.timeRanges = boardTimeRanges(day, new Date(), timeZone) as never;
+  }, [day, hours, timeZone]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (scheduler.current) scheduler.current.timeRanges = boardTimeRanges(latest.current.day, new Date(), timeZone) as never;
+    }, 60_000);
+    return () => clearInterval(timer);
+  }, [timeZone]);
 
   if (failed) return <p role="alert">{failed}</p>;
   return <div ref={host} className="sk-scheduler" />;

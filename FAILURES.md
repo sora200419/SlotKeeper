@@ -21,7 +21,7 @@
 - **Root cause**: Wrong assumption: that a heredoc with a quoted delimiter is always taken literally in this Bash tool. In a long script, several heredocs plus embedded python snippets broke the outer parse, and on failure nothing in the script runs. After the first failure the method was not changed, and the same thing was tried twice more.
 - **Fix**: Wrote `components/`, `app/book/`, `tests/paypal/deposits.test.ts` and the other files with the Write / Edit tools; Bash is only for running commands.
 - **Rule destination**: global ~/.claude/CLAUDE.md
-- **Recurrences**: none
+- **Recurrences**: 2026-11-05: a multi-line `node -e '…'` edit with a TypeScript block broke on an apostrophe in a comment ("Bryntum's"); node failed and bash then tried to run the rest of the text as commands (no files changed, checked with `git status`). Redone with the Edit tool. A prompt rule has not held, so this should become a hook check (proposed to the user).
 
 ### F-002 · 2026-10-25 · Rethrowing an SDK error unchanged leaked the auth header into logs
 - **Symptom**: When the OAuth token request hit TLS interception, Next.js printed the whole axios error to the dev server log, including `Authorization: Basic <clientId:secret>`. Review then found a second path: the SDK's `ResponseValidationError` was not recognised and was thrown as is, carrying the same auth header.
@@ -125,6 +125,13 @@
 - **Symptom**: The confirmation page said the hold was valid until 19:25 PST. I compared that with terminal and Render-log times from the user's screenshots (11:25 AM), assumed those were Los Angeles time, and told the user the page probably showed UTC as PST (8 hours off). CLAUDE.md then got "12:05 PT" and "11:20 PT" for times that were the user's browser time (UTC+8). A later booking showed exactly 29 days to expiry, which exposed the mistake: the page had been right all along.
 - **Root cause**: Wrong assumption: terminal, Render log and taskbar times are shown in the viewer's own zone (UTC+8 here), and I labelled them with a zone I never confirmed before deriving a duration from them.
 - **Fix**: The times in CLAUDE.md are relabelled UTC+8; the docs now state the observed 29-day expiry; the "display bug" was withdrawn.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
+
+### F-017 · 2026-11-05 · A mutation check restored the file with git checkout and wiped the uncommitted fix
+- **Symptom**: To prove the new slot tests catch the bug, I removed the check from the uncommitted `app/api/bookings/route.ts`, ran the tests (6 failed, as wanted), then "restored" it with `git checkout --`. That brought back the last commit, so the whole new route was gone. A backup copy made just before saved it.
+- **Root cause**: Wrong assumption: I treated `git checkout` as "undo my temporary edit", but it restores the committed version, and the fix itself was not committed yet.
+- **Fix**: Copied the backup back, confirmed the route and its 8 tests, deleted the backup.
 - **Rule destination**: global ~/.claude/CLAUDE.md
 - **Recurrences**: none
 

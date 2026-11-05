@@ -24,9 +24,13 @@ function jsonRequest(url: string, body: unknown) {
   });
 }
 
-/** A booking created through the real route, 24 hours from the real clock (route uses new Date()). */
+/**
+ * A booking created through the real route (it uses new Date()), at 10:00 UTC tomorrow: always a free
+ * slot inside opening hours, on the half-hour grid, 10-34 hours ahead, whatever the real clock says.
+ */
 async function createBookingViaApi() {
-  const startsAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const startsAt = `${tomorrow.toISOString().slice(0, 10)}T10:00:00.000Z`;
   const res = await createBookingRoute(
     jsonRequest('http://app.test/api/bookings', { serviceId: 'haircut', customerName: 'Ana', startsAt }),
   );
@@ -36,12 +40,16 @@ async function createBookingViaApi() {
 
 beforeEach(() => {
   (globalThis as { __slotkeeperBookings?: unknown }).__slotkeeperBookings = undefined;
+  // Every booking here comes from the same (unknown) client: start each test with a fresh per-client limit.
+  (globalThis as { __slotkeeperWebBookingLimiter?: unknown }).__slotkeeperWebBookingLimiter = undefined;
   createOrder.mockReset();
   authorizeOrder.mockReset();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.stubEnv('NEXT_PUBLIC_PAYPAL_CLIENT_ID', 'public-client-id');
   vi.stubEnv('PAYPAL_CLIENT_SECRET', 'super-secret-value');
   vi.stubEnv('NEXT_PUBLIC_PAYPAL_ENVIRONMENT', 'sandbox');
+  // createBookingViaApi books 10:00 UTC: pin the shop zone so a value from the shell can't move it.
+  vi.stubEnv('BUSINESS_TIME_ZONE', 'UTC');
 });
 afterEach(() => {
   vi.unstubAllEnvs();

@@ -24,10 +24,23 @@ export function createRateLimiter(options: { limit: number; windowMs: number; ma
   };
 }
 
-const state = globalThis as typeof globalThis & { __slotkeeperHoldLimiter?: ReturnType<typeof createRateLimiter> };
+const state = globalThis as typeof globalThis & {
+  __slotkeeperHoldLimiter?: ReturnType<typeof createRateLimiter>;
+  __slotkeeperWebBookingLimiter?: ReturnType<typeof createRateLimiter>;
+};
 
 /** hold_slot: at most 5 reservations per client every 10 minutes. */
 export function getHoldLimiter() {
   state.__slotkeeperHoldLimiter ??= createRateLimiter({ limit: 5, windowMs: 10 * 60 * 1000 });
   return state.__slotkeeperHoldLimiter;
+}
+
+/**
+ * The /book form: at most 10 booking attempts per client every 10 minutes. Refused attempts count too,
+ * which leaves a person room to retry a taken time several times, but stops one script from filling
+ * the shared cap on unpaid web bookings.
+ */
+export function getWebBookingLimiter() {
+  state.__slotkeeperWebBookingLimiter ??= createRateLimiter({ limit: 10, windowMs: 10 * 60 * 1000 });
+  return state.__slotkeeperWebBookingLimiter;
 }

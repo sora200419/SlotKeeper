@@ -44,6 +44,8 @@ export interface BoardService {
   id: string;
   name: string;
   durationMinutes: number;
+  /** Full price; the deposit counts toward it and the rest is paid at the shop. */
+  priceCents?: number;
 }
 
 export interface BoardData {
@@ -588,6 +590,34 @@ export function dayHours(events: BoardEvent[], day: string, timeZone: string): {
 export function addDays(day: string, delta: number): string {
   const [y, m, d] = day.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d + delta)).toISOString().slice(0, 10);
+}
+
+/** Opening hours in shop time; must match OPEN_MINUTE/CLOSE_MINUTE in lib/booking/availability.ts (a test checks). */
+export const SHOP_OPEN_HOUR = 9;
+export const SHOP_CLOSE_HOUR = 18;
+
+export interface BoardTimeRange {
+  id: string;
+  /** Business wall-clock time, like the events (see wallClock). */
+  startDate: string;
+  endDate?: string;
+  name?: string;
+  cls: string;
+}
+
+/**
+ * Shading for the closed hours of `day`, and a "Now" line when `now` falls on that day. Both are in
+ * shop time: Bryntum's own current-time line would follow the viewer's browser clock instead.
+ */
+export function boardTimeRanges(day: string, now: Date, timeZone: string): BoardTimeRange[] {
+  const pad = (hour: number) => String(hour).padStart(2, '0');
+  const ranges: BoardTimeRange[] = [
+    { id: 'closed-morning', startDate: `${day}T00:00:00`, endDate: `${day}T${pad(SHOP_OPEN_HOUR)}:00:00`, cls: 'sk-closed' },
+    { id: 'closed-evening', startDate: `${day}T${pad(SHOP_CLOSE_HOUR)}:00:00`, endDate: `${addDays(day, 1)}T00:00:00`, cls: 'sk-closed' },
+  ];
+  const nowWall = wallClock(now.toISOString(), timeZone);
+  if (nowWall.slice(0, 10) === day) ranges.push({ id: 'now', startDate: nowWall, name: 'Now', cls: 'sk-now' });
+  return ranges;
 }
 
 /** The next day with a booking on it after `day`, for jumping past empty days. */

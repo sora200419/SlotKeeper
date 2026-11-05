@@ -68,10 +68,10 @@ export function NewBookingForm({
       </label>
       <label className="site-field">
         Time{' '}
-        <input name="startsAt" type="datetime-local" required defaultValue={defaultStartsAt} aria-describedby="startsAt-hint" />
+        <input name="startsAt" type="datetime-local" step={1800} required defaultValue={defaultStartsAt} aria-describedby="startsAt-hint" />
       </label>
       <small id="startsAt-hint" className="site-hint">
-        Times are shop time: {timeZone}.
+        Times are shop time: {timeZone}. Open 9:00-18:00; book on the hour or half hour.
       </small>
       <button type="submit" className="site-button site-button-primary" disabled={submitting}>
         {submitting ? 'Booking…' : 'Book and hold deposit'}

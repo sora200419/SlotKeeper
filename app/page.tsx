@@ -49,7 +49,7 @@ export default function Home() {
         <ol className="site-steps">
           <li>The customer books and approves in PayPal. PayPal holds the deposit.</li>
           <li>
-            After the appointment the owner captures it. If the customer doesn&rsquo;t show up, the owner
+            After the appointment the owner captures it as part of the price, and the rest is paid at the shop. If the customer doesn&rsquo;t show up, the owner
             charges a no-show fee up to the deposit, and the rest of the hold is released.
           </li>
           <li>If the booking is cancelled, any hold is released and nothing is charged.</li>

@@ -42,7 +42,7 @@ describe('GET /api/staff/board', () => {
     const body = JSON.parse(text);
     expect(body.timeZone).toBe('America/Los_Angeles');
     expect(body.staff).toContainEqual({ id: 'maria', name: 'Maria' });
-    expect(body.services).toContainEqual({ id: 'haircut', name: 'Haircut', durationMinutes: 45 });
+    expect(body.services).toContainEqual({ id: 'haircut', name: 'Haircut', durationMinutes: 45, priceCents: 4500 });
     expect(body.bookings.map((b: Booking) => b.id)).toContain('board-1');
     expect(body.unsavedWrites).toBe(0);
   });

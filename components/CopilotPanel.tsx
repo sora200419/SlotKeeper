@@ -144,7 +144,22 @@ const ACTION: Record<PlanStep['type'], string> = {
   run_payouts: 'Paid staff',
 };
 
-export function AuditList({ entries }: { entries: AuditEntry[] }) {
+/** An audit time in shop time with its zone, so every viewer reads the same clock. */
+export function auditTime(at: string, timeZone: string): string {
+  // en-US names US zones (PST/PDT); en-GB would print "GMT-8".
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZoneName: 'short',
+  }).format(new Date(at));
+}
+
+export function AuditList({ entries, timeZone }: { entries: AuditEntry[]; timeZone: string }) {
   if (entries.length === 0) return <p className="sk-empty">Every action the copilot runs is recorded here with its PayPal id.</p>;
   return (
     <ol className="sk-audit">
@@ -153,7 +168,7 @@ export function AuditList({ entries }: { entries: AuditEntry[] }) {
           <div>
             <strong>{ACTION[entry.action]}</strong>
             {entry.amountCents !== undefined && <span> {dollars(entry.amountCents)}</span>}
-            <time dateTime={entry.at}>{new Date(entry.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</time>
+            <time dateTime={entry.at}>{auditTime(entry.at, timeZone)}</time>
           </div>
           <p>{entry.why}</p>
           {entry.paypal && <code>{Object.entries(entry.paypal).map(([k, v]) => `${k}: ${v}`).join(' · ')}</code>}

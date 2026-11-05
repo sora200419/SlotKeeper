@@ -161,8 +161,9 @@ export function DepositCheckout({ bookingId, currency, depositLabel, timeZone }:
   return (
     <section>
       <p>
-        Deposit to hold this slot: <strong>{depositLabel}</strong>. PayPal only holds it now;
-        nothing is charged unless you miss the appointment.
+        Deposit to hold this slot: <strong>{depositLabel}</strong>. PayPal only holds it now. After your
+        appointment the shop takes it as part of the price; if you miss the appointment all or part of it can be kept as a
+        no-show fee; if the booking is cancelled, nothing is charged.
       </p>
       {phase.kind === 'loading' && <p className="site-muted">Loading PayPal…</p>}
       {(phase.kind === 'ready' || phase.kind === 'loading') && (

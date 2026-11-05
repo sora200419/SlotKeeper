@@ -19,6 +19,8 @@ const STATUS_TEXT: Record<Exclude<BookingStatus, 'awaiting_deposit'>, string> = 
   refunded: 'Deposit refunded',
 };
 
+const BALANCE_DUE = new Set<BookingStatus>(['awaiting_deposit', 'deposit_held', 'deposit_pending', 'completed']);
+
 export default async function BookingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const booking = getBookingStore().get(id);
@@ -26,6 +28,10 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
   const service = findService(booking.serviceId);
   const depositLabel = `${formatAmount(booking.deposit)} ${booking.deposit.currency}`;
   const timeZone = readBusinessTimeZone();
+  // The deposit counts toward the price; only the deposit goes through PayPal, the rest is paid in person.
+  const balance = service && BALANCE_DUE.has(booking.status)
+    ? { currency: booking.deposit.currency, cents: Math.max(0, service.price.cents - booking.deposit.cents) }
+    : undefined;
 
   return (
     <SiteShell>
@@ -34,6 +40,12 @@ export default async function BookingPage({ params }: { params: Promise<{ id: st
         <p className="site-sub">
           {booking.customerName} · {formatInZone(booking.startsAt, timeZone)}
         </p>
+        {service && balance && (
+          <p className="site-sub">
+            Price {formatAmount(service.price)} {service.price.currency} · deposit {depositLabel} through PayPal ·{' '}
+            {formatAmount(balance)} {balance.currency} paid at the shop
+          </p>
+        )}
         <div className="site-card">
           {booking.status === 'awaiting_deposit' ? (
             <DepositCheckout

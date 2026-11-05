@@ -9,13 +9,13 @@ money action is audited.
 
 ## What it does
 
-- **Deposit holds.** A customer books a slot and PayPal holds a deposit on their account (Orders v2 `AUTHORIZE`, JS SDK v6). Nothing is charged yet.
+- **Deposit holds.** A customer books a free slot (opening hours and staff availability are checked on the server) and PayPal holds a deposit on their account (Orders v2 `AUTHORIZE`, JS SDK v6). Nothing is charged yet. The deposit counts toward the service price, and the rest is paid at the shop; the pages and the board show the price, the deposit and that balance.
 - **Money actions for the owner.** Capture the whole deposit when the service happened, charge a no-show fee (partial capture, the rest of the hold is released), void the hold, or refund, from buttons on the staff board that each ask for confirmation. Reauthorizing a hold is an API route and a copilot step.
-- **Live staff board.** A Bryntum Scheduler day view coloured by deposit state; PayPal webhooks and staff actions update it live.
+- **Live staff board.** A Bryntum Scheduler day view coloured by deposit state, with closed hours shaded and a "Now" line in shop time; PayPal webhooks and staff actions update it live.
 - **Owner copilot.** The owner types what changed ("Maria is sick tomorrow, move her clients to Ken"). Claude reads the bookings with read-only tools and proposes a plan. The plan is previewed on the schedule, checked in code, and runs only after the owner approves. Every step is written to an audit log with its PayPal ids.
 - **Bookings by customers' AI assistants.** An MCP server (`/api/mcp`) lets an assistant search slots, hold one and get a PayPal approval link. The customer approves the deposit in PayPal themselves; the assistant never moves money.
 - **Saved wallet.** A customer can opt in to save their PayPal wallet (Vault) so a no-show fee can be charged later, once, without them present.
-- **End-of-day payouts.** One PayPal Payouts batch pays each staff member their commission. (The batch format already carries tips, but nothing creates tips yet.)
+- **End-of-day payouts.** One PayPal Payouts batch pays each staff member their commission on the money collected through PayPal (captured deposits, no-show fees and wallet charges, minus refunds). (The batch format already carries tips, but nothing creates tips yet.)
 - **Deposits report.** Captured deposits, no-show fees and refunds from PayPal Transaction Search.
 
 ## How it meets the judging criteria
@@ -75,7 +75,7 @@ The AI parts: the owner copilot in `lib/copilot/` (Claude, plan → approve → 
 
 You need a **PayPal sandbox personal account** (your own, from developer.paypal.com > Testing tools > Sandbox accounts). No credentials of ours are needed to book. The time box is shop time (Los Angeles, from `BUSINESS_TIME_ZONE`) wherever you are, and the confirmation page shows that time too; the deposits report shows UTC. Bookings can be at most 3 days ahead, because PayPal only guarantees that a held deposit can be captured for 3 days (the authorization's honor period). The authorization itself stays open longer: the "valid until" on the confirmation page is PayPal's own expiry date, 29 days later in our sandbox runs.
 
-1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the **Your name** field (bookings are shared and shown on the staff board) and choose a time within 3 days.
+1. Open https://slotkeeper-93dy.onrender.com/book, pick a service, type a nickname in the **Your name** field (bookings are shared and shown on the staff board) and choose a time within 3 days, on the hour or half hour between 9:00 and 18:00 shop time. A time that is taken or outside opening hours is refused with a message; pick another.
 2. Click **Book and hold deposit**, then pay with the PayPal button using your sandbox personal account. The page then shows "Deposit held" with the PayPal authorization id.
 3. The staff screens need a token (`STAFF_API_TOKEN`), given in the Devpost "Testing instructions". Open `/staff`, enter it, and your booking is on the board, coloured "Deposit held".
 4. Click your booking on the board. The **Booking** tab shows its deposit and only the money actions that deposit allows right now: **Capture $…** (the whole deposit), **Charge no-show fee** (any amount up to the deposit; the rest of the hold is released), **Release hold**, then **Refund**, and **Charge saved wallet** once the booking is completed or charged a no-show fee, if the customer saved their wallet and part of the deposit was not captured. Each asks for confirmation first. The same actions are API routes (`Authorization: Bearer <token>`) for scripts:

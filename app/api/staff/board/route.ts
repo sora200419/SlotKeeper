@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     requireStaff(request);
     return NextResponse.json({
       staff: listStaff().map(({ id, name }) => ({ id, name })),
-      services: listServices().map(({ id, name, durationMinutes }) => ({ id, name, durationMinutes })),
+      services: listServices().map(({ id, name, durationMinutes, price }) => ({ id, name, durationMinutes, priceCents: price.cents })),
       timeZone: readBusinessTimeZone(),
       bookings: getBookingStore().list().map(staffBooking),
       unsavedWrites: queuedWrites(),

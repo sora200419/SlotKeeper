@@ -234,7 +234,7 @@ export function StaffBoard() {
           ) : tab === 'copilot' && data ? (
             <CopilotPanel bookings={data.bookings} staff={data.staff} plan={plan} onPlan={handlePlan} api={api} />
           ) : tab === 'audit' ? (
-            <AuditList entries={audit} />
+            <AuditList entries={audit} timeZone={data?.timeZone ?? 'UTC'} />
           ) : null}
         </aside>
       </main>

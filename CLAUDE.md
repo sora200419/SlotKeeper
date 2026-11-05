@@ -90,6 +90,7 @@ PayPal/
 - [x] MCP checked live with Claude Code as the client (11-05): hold, create_deposit returned the approval link, sandbox approval, deposit held, lapsed hold cancelled, both shown on the board; cancel_booking on the held booking returned cancelled and PayPal's PAYMENT.AUTHORIZATION.VOIDED webhook arrived at 12:05 UTC+8 (Render log, shown in browser time). The first two create_deposit calls got PayPal 401; they worked after the user put a new PayPal secret on Render (service restarted 11:20 UTC+8; webhooks verified and handled after it)
 - [x] Secrets rotated (11-05): new PayPal secret on Render and in `.env.local`; new STAFF_API_TOKEN on Render, made for judging and checked on the live /staff (value kept only on Render and, at submission, in Devpost); Anthropic spend capped by $5 prepaid credit with auto-reload off
 - [x] Customer pages redesigned (11-05): landing page, /book and /book/[id] share `components/SiteShell.tsx` and `app/site.css` (scoped under `.sk-site`, board colours); no logic changes; deployed and checked live 11-05 (a card paragraph-spacing fix is not deployed yet)
+- [x] Pre-freeze polish (11-05, not deployed yet): POST /api/bookings checks the slot under the 'slots' lock like the MCP hold (opening hours, half-hour grid, free staff; no double booking; a refusal names free times that day; at most 20 unpaid web bookings block slots at once and 10 attempts per client per 10 min, else 429); price, deposit and "balance paid at the shop" on /book, /book/[id] and the board panel, and the checkout text no longer says "nothing is charged unless you miss it"; audit log in shop time; board shades closed hours and draws a shop-time "Now" line (Bryntum timeRanges)
 
 **In progress**
 - [ ] Nothing in progress.
@@ -105,9 +106,9 @@ PayPal/
 
 **Known issues**
 - Copilot requests are independent: it does not remember the previous message, so a follow-up must restate the whole request.
-- The audit log shows times in the viewer's browser zone, not shop time.
 - Locally the copilot and booking form use UTC unless `.env.local` sets `BUSINESS_TIME_ZONE` (Render sets America/Los_Angeles).
-- POST /api/bookings (the /book form) does not check opening hours (9:00-18:00); only MCP slot search does. Test bookings at 18:00 and 19:00 PT exist.
+- Older test bookings at 18:00 and 19:00 PT exist (made before /book checked opening hours).
+- Only the deposit goes through PayPal; the balance is paid at the shop and not recorded. Commission is on PayPal-collected money only. Invoicing for balance and tips is What's next.
 - Bryntum trial watermark; trial validity through judging: TBC.
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.
 - The board can briefly show an older booking state if a slow action response lands after a newer live update; a Retry button stays visible on a panel left open past the replay window (the server refuses it safely).
