@@ -135,6 +135,13 @@
 - **Rule destination**: global ~/.claude/CLAUDE.md
 - **Recurrences**: none
 
+### F-018 · 2026-11-09 · The rate limits never triggered on Render: the client key was a proxy hop that changes per request
+- **Symptom**: Live test 6.7: 11 `hold_slot` calls from one machine in about 10 minutes all succeeded (limit 5 per 10 minutes); the same key was used by the `/book` limit. 728 tests had passed and the code was deployed.
+- **Root cause**: Wrong assumption: the key was the last X-Forwarded-For entry, assuming Render's proxy is the only hop appending to it; behind Cloudflare the last entry is a hop that differs on every request. Never checked against real headers, and the tests fed the code the shape it assumed (one injected key, one single-entry header), so nothing exercised how the route derives the key.
+- **Fix**: `lib/api/client-key.ts` takes CF-Connecting-IP (a forged one gets 403 from Cloudflare, checked live), else the old entry; both routes use it. Found with a temporary masked header log (a7f3e33, removed). Route-level tests send Render-style headers; with the fix removed 6 tests fail.
+- **Rule destination**: global ~/.claude/CLAUDE.md
+- **Recurrences**: none
+
 ## Pruning log
 
 | Date | Action (delete / merge / automate / promote to global) | Entries | Notes |

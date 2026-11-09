@@ -4,7 +4,7 @@ import { createBookingMcpServer } from '@/lib/agent/mcp-server';
 import { getHoldLimiter } from '@/lib/agent/rate-limit';
 import { appOrigin } from '@/lib/api/app-origin';
 import { readLimitedBody } from '@/lib/api/body';
-import { describeForwarding } from '@/lib/api/forwarding-diagnostic';
+import { clientKey } from '@/lib/api/client-key';
 import { getBookingStore } from '@/lib/booking/store';
 import { getOrdersController, getPaymentsController } from '@/lib/paypal/client';
 import { sanitizeError } from '@/lib/paypal/errors';
@@ -16,14 +16,6 @@ export const dynamic = 'force-dynamic';
 const MAX_BODY_BYTES = 64 * 1024;
 
 /**
- * The caller's address for rate limiting: the last X-Forwarded-For entry, the one appended by our
- * own proxy (Render). Earlier entries come from the client and can be made up.
- */
-function clientKey(request: Request): string {
-  return request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || 'unknown';
-}
-
-/**
  * Remote MCP endpoint (Streamable HTTP, stateless: a fresh server per request, JSON responses) for a
  * customer's AI assistant, e.g. a Claude custom connector pointed at https://<host>/api/mcp.
  * Public like the booking page; changes to a booking need its booking token, and reservations are
@@ -32,12 +24,6 @@ function clientKey(request: Request): string {
 export async function POST(request: Request) {
   const body = await readLimitedBody(request, MAX_BODY_BYTES);
   if (!body) return NextResponse.json({ error: 'payload_too_large' }, { status: 413 });
-  // TEMPORARY (test plan 6.7): which proxy headers arrive, addresses masked. Remove with the key fix.
-  try {
-    console.info('[diag] mcp client headers', describeForwarding(request));
-  } catch (err) {
-    console.error('[diag] could not describe client headers', { error: err instanceof Error ? err.name : 'unknown' });
-  }
   try {
     const server = createBookingMcpServer({
       bookings: getBookingStore(),

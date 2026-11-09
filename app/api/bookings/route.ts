@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getWebBookingLimiter } from '@/lib/agent/rate-limit';
+import { clientKey } from '@/lib/api/client-key';
 import { errorResponse, readJsonObject } from '@/lib/api/responses';
 import { blocks, freeStaffFor, searchSlots } from '@/lib/booking/availability';
 import { BookingInputError, createBooking, MAX_UNPAID_WEB_HOLDS, SLOT_UNAVAILABLE_MESSAGE } from '@/lib/booking/bookings';
@@ -9,11 +10,6 @@ import { getBookingStore, type BookingStore } from '@/lib/booking/store';
 import { readBusinessTimeZone } from '@/lib/paypal/payout-deps';
 
 export const runtime = 'nodejs';
-
-/** The client's address as Render's proxy appends it (the last X-Forwarded-For entry), like the MCP route. */
-function clientKey(request: Request): string {
-  return request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || 'unknown';
-}
 
 /** Up to three free start times on the requested day, in shop time, to put in the refusal. */
 function freeTimesHint(store: BookingStore, serviceId: unknown, startsAt: unknown, timeZone: string, now: Date): string {

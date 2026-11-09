@@ -88,6 +88,19 @@ describe('POST /api/bookings limits each client', () => {
     expect((await book('2026-11-05T20:00:00.000Z', 'B', 'haircut', '198.51.100.7')).status).toBe(201);
   });
 
+  it('counts one client once when only the last X-Forwarded-For entry (a Cloudflare hop) changes, as on Render', async () => {
+    const attempt = (i: number) =>
+      createRoute(
+        new Request('http://app.test/api/bookings', {
+          method: 'POST',
+          headers: { 'cf-connecting-ip': '175.141.10.20', 'x-forwarded-for': `175.141.10.20, 104.23.${i}.9` },
+          body: JSON.stringify({ serviceId: 'haircut', customerName: `A${i}`, startsAt: '2026-11-05T18:00:00.000Z' }),
+        }),
+      );
+    for (let i = 0; i < 10; i++) await attempt(i);
+    expect((await attempt(10)).status).toBe(429);
+  });
+
   it('lets the client book again once the window has passed', async () => {
     for (let i = 0; i < 10; i++) await book('2026-11-05T18:00:00.000Z', `A${i}`);
     expect((await book('2026-11-05T20:00:00.000Z', 'late')).status).toBe(429);
