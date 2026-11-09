@@ -40,6 +40,20 @@ describe('/api/mcp', () => {
     expect(body.result.tools.map((t: { name: string }) => t.name)).toContain('hold_slot');
   });
 
+  it('logs the forwarding headers masked and still answers with odd headers', async () => {
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const request = rpc({ jsonrpc: '2.0', id: 4, method: 'tools/list', params: {} });
+    request.headers.set('x-forwarded-for', '198.51.100.23:51234, , [2001:db8::1]:443, garbage');
+    request.headers.set('x-real-ip', '198.51.100.23, 2001:db8::1');
+    const res = await POST(request);
+    expect(res.status).toBe(200);
+    expect((await res.json()).result.tools.length).toBeGreaterThan(0);
+    const logged = info.mock.calls.find((call) => call[0] === '[diag] mcp client headers');
+    expect(logged).toBeDefined();
+    expect(JSON.stringify(logged)).not.toContain('198.51.100.23');
+    expect(JSON.stringify(logged)).not.toContain('2001:db8::1');
+  });
+
   it('refuses GET (no server stream in stateless mode) and oversized bodies', async () => {
     expect(GET().status).toBe(405);
     const big = new Request('http://app.test/api/mcp', { method: 'POST', headers: { 'content-length': String(1024 * 1024) }, body: '{}' });

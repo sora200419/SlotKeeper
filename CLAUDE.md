@@ -96,7 +96,7 @@ PayPal/
 - [x] Next.js 16.4.2 → 16.4.5 (11-05, not deployed yet): security release (7 moderate advisories; none found in app code by grep: no use cache, next/image, Edge runtime or forwarded fetch responses); lockfile changes only next and @next/*; npm audit 0 vulnerabilities; 730 tests pass; clean webpack build peak 3.20 GB (Render limit 8 GB)
 
 **In progress**
-- [ ] Nothing in progress.
+- [ ] Rate-limit key on Render (11-09): live test plan 6.7 failed, 11 MCP holds from one machine in about 10 minutes all succeeded (limit 5 per 10 min); Render Events show no restart since the 11-07 deploy. Suspected cause, not confirmed: the last X-Forwarded-For entry is a changing proxy hop, not the client; `app/api/bookings/route.ts` uses the same key. A TEMPORARY masked header log (`lib/api/forwarding-diagnostic.ts`, `[diag] mcp client headers` in `app/api/mcp/route.ts`) is added to find out; remove it together with the key fix for both routes, then rerun 6.7
 
 **To do (by priority)**
 - [ ] After judging ends (12-15): rotate STAFF_API_TOKEN on Render again. Until then keep Anthropic auto-reload off ($5 prepaid caps spend) and watch the balance

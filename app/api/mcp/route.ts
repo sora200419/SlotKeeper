@@ -4,6 +4,7 @@ import { createBookingMcpServer } from '@/lib/agent/mcp-server';
 import { getHoldLimiter } from '@/lib/agent/rate-limit';
 import { appOrigin } from '@/lib/api/app-origin';
 import { readLimitedBody } from '@/lib/api/body';
+import { describeForwarding } from '@/lib/api/forwarding-diagnostic';
 import { getBookingStore } from '@/lib/booking/store';
 import { getOrdersController, getPaymentsController } from '@/lib/paypal/client';
 import { sanitizeError } from '@/lib/paypal/errors';
@@ -31,6 +32,12 @@ function clientKey(request: Request): string {
 export async function POST(request: Request) {
   const body = await readLimitedBody(request, MAX_BODY_BYTES);
   if (!body) return NextResponse.json({ error: 'payload_too_large' }, { status: 413 });
+  // TEMPORARY (test plan 6.7): which proxy headers arrive, addresses masked. Remove with the key fix.
+  try {
+    console.info('[diag] mcp client headers', describeForwarding(request));
+  } catch (err) {
+    console.error('[diag] could not describe client headers', { error: err instanceof Error ? err.name : 'unknown' });
+  }
   try {
     const server = createBookingMcpServer({
       bookings: getBookingStore(),
