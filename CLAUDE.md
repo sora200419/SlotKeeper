@@ -8,7 +8,7 @@
 - **Project name**: SlotKeeper
 - **One-line summary**: An AI front desk for small appointment businesses (salons, physio, tutors, groomers). Every booking, whether made by a person or by a customer's AI assistant, is backed by a PayPal sandbox deposit hold. An owner copilot proposes day plans that the owner approves.
 - **Type**: Hackathon (PayPal AI Hackathon on Devpost, submission ID 1246964, solo)
-- **Deadline**: Thu 2026-11-12 12:00 PT (= Fri 11-13 04:00 UTC+8). Internal target: submit on 11-11. Feature freeze 11-07 (PLAN.md §7). Demo must stay free and working until judging ends on 12-15.
+- **Deadline**: Thu 2026-11-12 12:00 PT (= Fri 11-13 04:00 UTC+8). Internal target: submit on 11-11. Feature freeze 11-07 (local PLAN.md §7). Demo must stay free and working until judging ends on 12-15.
 - **Current stage**: Live on Render; preparing the demo and submission (video, screenshots, Devpost form).
 
 ## 2. Goals and Success Criteria
@@ -48,19 +48,18 @@ PayPal/
 ├── components/     React components (StaffBoard, BookingScheduler, BookingPanel, ...)
 ├── lib/            agent/ (MCP), api/, board/ (pure board logic), booking/, copilot/, paypal/ (server-only), storage/
 ├── tests/          Vitest suites; helpers/paypal-stub.ts stubs the PayPal SDK transport
-├── docs/           devpost.md (submission text), apimatic-prompts.md
+├── docs/           apimatic-prompts.md (devpost.md, video-script.md, test-plan.md are local only)
 ├── githooks/       pre-commit / pre-push gates (secrets, .env, ledger lint)
 ├── .claude/        harness: agents, hooks, skills, lint.js
 ├── render.yaml     Render Blueprint
-├── PLAN.md         original hackathon plan
 ├── FAILURES.md     incident log (F-001 to F-014)
 └── CLAUDE.md       this file
 ```
 
 ## 6. Documentation Index (read as needed before starting)
-- `PLAN.md` (repo root): what we are building, for whom, why, schedule, risks
+- `PLAN.md` (local only, removed from the public repo 11-12): what we are building, for whom, why, schedule, risks
 - `README.md`: architecture, PayPal API → code map, env vars, local run, deploy, judge test steps
-- `docs/devpost.md`: Devpost submission text and the pre-submit checklist
+- `docs/devpost.md` (local only, removed from the public repo 11-12): Devpost submission text and the pre-submit checklist
 - `docs/apimatic-prompts.md`: prompts used with the APIMatic Context Plugin
 - `FAILURES.md`: past mishaps and their prevention rules
 - PRD / TRD / APP-FLOW / UI-UX: none yet
@@ -96,14 +95,15 @@ PayPal/
 - [x] Next.js 16.4.2 → 16.4.5 (11-05, not deployed yet): security release (7 moderate advisories; none found in app code by grep: no use cache, next/image, Edge runtime or forwarded fetch responses); lockfile changes only next and @next/*; npm audit 0 vulnerabilities; 730 tests pass; clean webpack build peak 3.20 GB (Render limit 8 GB)
 - [x] Rate-limit key on Render (11-09, 35ad76a): live test plan 6.7 first failed, 11 MCP holds from one machine in about 10 minutes all succeeded (limit 5 per 10 min). Cause confirmed with a masked header log (a7f3e33, since removed): the last X-Forwarded-For entry is a Cloudflare hop that changes on every request, so every request looked like a new client. A forged CF-Connecting-IP is answered 403 by Cloudflare (checked live), a forged X-Forwarded-For is not. Fixed in `lib/api/client-key.ts` (cf-connecting-ip, else last XFF entry), used by `/api/mcp` and `/api/bookings`, with route-level tests. Deployed 11-09 17:29 UTC+8 (Render Live 17:31); rerun at 17:33: holds 1 to 5 succeeded, the 6th refused with `rate_limited`; the 5 test holds cancelled and the board shows no yellow bookings
 - [x] Live test plan run on Render (11-09, 35ad76a), all passed: 4.3 amount input (`4,50` accepted as $4.50, `4,500` and `50` refused), 4.7 double click (one $4.00 no-show fee, one `PAYMENT.CAPTURE.COMPLETED` in Render logs), 5.4 copilot Reject (nothing changed, audit log unchanged), 8.1 deposits report (totals add up), 8.2 payouts (batch `slotkeeper-payouts-2026-11-08`, PayPal `SUCCESS`, item `paid`), 10.1/10.2 restart (Comma Test no-show and Copilot Test release kept; "Persistence Check" is on Sun 11-01 17:00 shop time, still Deposit due). Test bookings left on the board: Comma Test (no-show fee, saved wallet not charged); the rest are cancelled and grey
+- [x] Demo video made (11-12): about 1:46, 1080p, English captions and no audio, built with ffmpeg from the raw screen recordings (clips and script kept locally, not in the repo). Not uploaded to YouTube yet
 
 **In progress**
 - (nothing in progress)
 
 **To do (by priority)**
 - [ ] After judging ends (12-15): rotate STAFF_API_TOKEN on Render again. Until then keep Anthropic auto-reload off ($5 prepaid caps spend) and watch the balance
-- [ ] At submission: type the Render STAFF_API_TOKEN (the judging token) into the Devpost testing field only (docs/devpost.md checklist item 1)
-- [ ] Video (under 3 min), screenshots, one sourced no-show statistic. Script and a manual test plan are kept locally in docs/ (video-script.md, test-plan.md; not committed, listed in .git/info/exclude) (11-05)
+- [ ] At submission: type the Render STAFF_API_TOKEN (the judging token) into the Devpost testing field only (local docs/devpost.md checklist item 1)
+- [ ] Upload the video to YouTube (unlisted), screenshots, one sourced no-show statistic. Script and a manual test plan are kept locally in docs/ (video-script.md, test-plan.md; not committed, listed in .git/info/exclude) (11-05)
 - [ ] GitHub About fields (description, website, topics)
 - [ ] Discord question: AI API credits. Bryntum answered on Discord (11-05): from v8.0 (releasing this week) a 45-day trial can be renewed with a new key. Still to check how that applies to our npm trial package 7.3.7 (no key); do not upgrade before the freeze
 - [ ] Submit on Devpost by 11-11
@@ -117,6 +117,7 @@ PayPal/
 - During a deploy two instances overlap; a write clash becomes a conflict record and the booking goes to staff review.
 - Copilot move steps do not check the slot when they run (only the plan is validated): a booking dragged in another tab while a plan is open can end up overlapping it. Bookings that start within 30 minutes look draggable but every drop is refused.
 - Copilot plan validation (lib/copilot/plan.ts move_booking) checks only that the staff member exists and moveTimeProblem; it does not check that the staff member does the service, opening hours or overlap, so a copilot plan can move a haircut to Ken while a drag refuses it. The examples in the UI placeholder, README, devpost and landing page no longer suggest moving to Ken (changed 11-05).
+- Live board updates were seen to lag or be missed on the live site (11-12): after a drag (Noor) and after a copilot move (Bea) the board showed the old time until a refresh, while the server and audit log were correct. Cause not investigated; refresh shows the true state.
 - The board can briefly show an older booking state if a slow action response lands after a newer live update; a Retry button stays visible on a panel left open past the replay window (the server refuses it safely).
 - Payouts carry a tip field, but nothing creates tips yet.
 
@@ -168,7 +169,8 @@ Deploy: Render dashboard → `slotkeeper` → Manual Deploy → Deploy latest co
 ## 14. Decision Log
 | Date | Decision | Reason |
 |---|---|---|
-| 2026-10-20 | Build SlotKeeper; target Bryntum sponsor prize | Least crowded sponsor prize; fits "agent books and pays" (PLAN.md §4, §6) |
+| 2026-10-20 | Build SlotKeeper; target Bryntum sponsor prize | Least crowded sponsor prize; fits "agent books and pays" (local PLAN.md §4, §6) |
+| 2026-11-12 | Keep PLAN.md and docs/devpost.md out of the public repo (local copies, listed in .git/info/exclude) | PLAN.md holds prize strategy and judge research; devpost.md holds a private pre-submit checklist; neither is needed to run or judge the project |
 | 2026-10-27 | Render paid plans (starter web, basic-256mb Postgres) | Free instances sleep and drop webhooks; free Postgres expires before 12-15 |
 | 2026-10-27 | `autoDeploy: false` | Old and new instances overlap during a deploy; deploy when quiet |
 | 2026-10-31 | Postgres write-through records with revisions | Bookings must survive restarts; overlapping instances must not overwrite each other |

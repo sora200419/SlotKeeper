@@ -27,7 +27,7 @@ PayPal is the core, not an add-on: eight PayPal capabilities are used for real b
 - Webhook signatures are verified locally; the payload is only a pointer, and the object is re-read from PayPal under the booking's lock.
 - A day's payout batch is frozen before it is sent and only paid after the day is over, so money that settles late is not missed or paid twice.
 - The copilot's read tools never show the model a vault, PayPal customer, order or authorization id (a test checks this), and the model has no tool that moves money.
-- 728 automated tests (Vitest); the PayPal ones run the real SDK over a stubbed HTTP adapter (no network). There is also an opt-in suite that sends `PayPal-Mock-Response` to the real sandbox to check declines and expiries. The flows were also run against the PayPal sandbox: authorize, no-show capture, refund, void, saved-wallet charge, a payout batch and webhook deliveries.
+- 738 automated tests (Vitest); the PayPal ones run the real SDK over a stubbed HTTP adapter (no network). There is also an opt-in suite that sends `PayPal-Mock-Response` to the real sandbox to check declines and expiries. The flows were also run against the PayPal sandbox: authorize, no-show capture, refund, void, saved-wallet charge, a payout batch and webhook deliveries.
 
 **Design.**
 The owner's day is one screen: bookings coloured by deposit state (due, held, captured, no-show, refunded, needs review, released), a live indicator, and the copilot beside it. A proposed plan appears on the schedule before anything runs: a dashed ghost where a booking would go, the original faded, and a note on every booking whose money would move ("Will release hold", "Will charge $4.00"). The money the owner approves is shown as the same amount the payment layer will use.
@@ -39,7 +39,7 @@ Small appointment businesses (salons, physio, tutoring, pet grooming) lose reven
 Deposits and no-show fees already exist. What is new is the agent layer around them: (1) a booking channel for customers' AI assistants where the assistant reserves and the human approves the PayPal payment; (2) a copilot whose output is a plan, not an action, previewed on the schedule and executed only after approval, with the audit trail tying each step to PayPal transaction ids; (3) holds, partial captures and a saved wallet combined so a no-show fee can be charged without ever exceeding the deposit. PayPal's [agent tools reference](https://developer.paypal.com/ai-tools/agent-tools) (read on 2026-11-04) has no tool for authorize, void, reauthorize, Payouts or Vault, and its `pay_order` captures an authorized order by order id alone, with no amount. SlotKeeper builds those money tools itself on the Server SDK. The reference also says PayPal's remote MCP commerce tools cover gift cards only; SlotKeeper's MCP server brings service booking to the same idea.
 
 **Presentation.**
-This README, [`docs/devpost.md`](docs/devpost.md) and the steps below are written so the project can be evaluated without running it; the live demo needs only a PayPal sandbox personal account.
+This README and the steps below are written so the project can be evaluated without running it; the live demo needs only a PayPal sandbox personal account.
 
 ## Architecture
 

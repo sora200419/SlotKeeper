@@ -2,7 +2,7 @@
 
 These are the prompts used with Claude Code and the APIMatic Context Plugin for PayPal
 (`npx context-plugins install https://github.com/paypaldev/server-sdk-context-plugin-preview`).
-They follow the build order in `PLAN.md`. Each prompt names the plugin explicitly so the agent
+They follow the order in which the project was built. Each prompt names the plugin explicitly so the agent
 loads the `paypal:typescript-*` skills before writing code.
 
 Plugin coverage: Orders, Payments, Vault, Subscriptions and Transaction Search through
